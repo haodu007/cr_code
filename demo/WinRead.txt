@@ -1,0 +1,13 @@
+###########################################################################
+#
+# Testing CR in primitive towers							
+# 				                                    					
+###########################################################################
+
+read "C:/Users/DELL/Desktop/ISSAC2025CR/src/AddDecomp.txt";
+read "C:/Users/DELL/Desktop/ISSAC2025CR/src/DField.txt";
+read "C:/Users/DELL/Desktop/ISSAC2025CR/src/LogPart.txt";
+read "C:/Users/DELL/Desktop/ISSAC2025CR/src/PrimitiveCR.txt";
+read "C:/Users/DELL/Desktop/ISSAC2025CR/src/PrimitiveInt.txt";
+read "C:/Users/DELL/Desktop/ISSAC2025CR/src/Rational.txt";
+read "C:/Users/DELL/Desktop/ISSAC2025CR/src/Reduction.txt";
