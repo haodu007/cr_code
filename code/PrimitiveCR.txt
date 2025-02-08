@@ -37,8 +37,6 @@ AuxiliaryReduction  := proc(x, T, dT, p)
           while pt <> 0 do
                    l := lcoeff(pt, t);  d := degree(pt, t); 
                    (g, u)  := CompleteReduction(x, [seq(T[i], i=1..n-1)], [seq(dT[i], i=1..n-1)], l);
-                   #s:=normal(l-DField:-Derivative(x, T, dT, g)-u);
-                   #if s <> 0 then error" found" end if;
                    q := q + g*t^d;
                    r := r + normal(u)*t^d;
                    pt := normal((pt - l*t^d) - d*g*dT[n]*t^(d-1));
@@ -144,7 +142,6 @@ CompleteReduction  :=  proc(x, T, dT, f)
           G := _TowerInfo[n];
           (b, c) := G[3], G[4]; 
           (u, v) := Projection(x, T, dT, r, b, c);
-          if n=3 then print(proj) end if; 
           return H[1]+q+u,  H[2]+v;
 end proc:
 

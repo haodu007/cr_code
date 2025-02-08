@@ -16,7 +16,6 @@ Reduction := module ()
      GShellReduction1, 
      GShellReduction,
       ResidualForm0,
-     SIntegrable,
       LaurentPolynomialReduction1,
       LaurentPolynomialReduction2,
       LaurentPolynomialReduction;
@@ -25,6 +24,7 @@ Reduction := module ()
      GKernelReduction1,
      RelativeFactor,
      GKernelReduction0,
+     SIntegrable,
      GFindSepcialPolyWildCase,
      PolynomialReduction2,
      GMyRatSum,

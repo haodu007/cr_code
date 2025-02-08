@@ -50,7 +50,7 @@ SPrimitive  :=  proc(x, T, dT, f, M)
     #------------------------------
     # reduce the tn-proper part
     #-------------------------------
-    H := Reduction:-HermiteReduce(x, T, dT, P[n + 1]);
+    H := Reduction:-HermiteReduce1(x, T, dT, P[n + 1]);
 
    
 
@@ -74,11 +74,10 @@ SPrimitive  :=  proc(x, T, dT, f, M)
              j := 0;  hs := 0;
             for i in hi do
                  j := j+1;
-                 H := Reduction:-HermiteReduce(x, T[1..i], dT[1..i], hc[j]);
+                 H := Reduction:-HermiteReduce1(x, T[1..i], dT[1..i], hc[j]);
                  (ip, hp) := H[1], H[2];
                  if ip <> 0 then
-                    #g := normal(g + ip*hm);
-                    g := g + ip*hm;
+                    g := normal(g + ip*hm);
                     G := IBPReduction1(x, T, dT, ip, hm);
                     R := normal(R - G);
                   end if;

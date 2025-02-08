@@ -652,7 +652,7 @@ BasisElement0 := proc(x, f)
      local r, p, d, num, den, L, M, l, i, q, m, u;
      (r, p) := ProperAndPolynomialParts(f, x);
      if p <> 0 then 
-        d := ldegree(p, x);
+        d := degree(p, x);
         return x^d, coeff(p, x, d);
      end if;
      (num, den) :=  numer(r), denom(r);
@@ -660,7 +660,7 @@ BasisElement0 := proc(x, f)
       q := quo(den, p^m, x);
       gcdex(q, p^m, x, u);
       r := rem(num*u, p, x);
-      d := ldegree(r, x);
+      d := degree(r, x);
      return x^d/p^m, coeff(r, x, d);
 end proc:
 

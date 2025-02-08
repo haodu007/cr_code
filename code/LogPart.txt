@@ -1,0 +1,1309 @@
+###########################################################################
+# Module:  LogPart												                                 					
+###########################################################################
+
+LogPart := module ()
+  option package;
+  description "The module includes functions for computing logarithmic parts";
+  export
+     CompleteLogarithmicPart,
+     IsACompleteLogarithmicPart,
+     LogarithmicPart,
+     VerifyLogPart;
+  local 
+     AlgEH,
+     AlgEHs,
+     AlgLA,
+     AlgLAs,
+     AlgGB,
+     AlgGBs,
+     AlgRT, 
+     AlgRTs,
+     AlgSR,
+     AlgSRs,
+     CFR,
+     GroebnerResidues, 
+     IntLogarithmicPart,
+     LogarithmicPartA,
+     LowerBoundForRank,    
+     MonicAssociate,
+     RankOfAnUpperTriangularMatrix,
+     ResultantResidues,
+     RothsteinTrager,
+     SortPolynomials;
+
+##########################################################################
+# Name: CompleteLogarithmicPart
+# Calling Sequence：LogarithmicPart(x, T, dT, f, z)
+# Input:   x,    an indeterminate
+#             T,    a nonempty list [t1, ..., tn] of indeterminates;
+#             dT,  the list of derivatives of the elements in T;
+#             f,    a nonzero tn-simple element in C(x, T);
+#             z,    another indeterminate'
+#Optional: M,  selection of a method.  If the optional arguement is not presented, then AlgEHs is chosen
+# Output:  the logarithmic part of int(f, x) if there exists one. Otherwise, false is returned.
+############################################################################  
+
+CompleteLogarithmicPart := proc(x, T, dT, f, z, M)   
+    local L;
+
+    #-------------------------------------------
+    # Choose a method
+    #-------------------------------------------
+
+    if nargs = 6 then 
+       if args[6] = 'RTs' then
+          #print(Rothstein_Trager);
+          L := AlgRTs(x, T, dT, f, z);
+       end if;
+       if args[6] = 'SRs' then
+          #print(Lazard_Rioboo_Trager);
+          L := AlgSRs(x, T, dT, f, z);
+       end if;
+       if args[6] = 'LAs' then
+          #print(FGLM_based);
+          L := AlgLAs(x, T, dT, f,  z);
+       end if;
+       if args[6] = 'GBs' then
+          #print(Czichowski);
+          L := AlgGBs(x, T, dT, f, z);
+       end if;
+     else 
+       #print(Evaluation);
+       L  := AlgEHs(x, T, dT, f, z);
+     end if;
+     return L;
+end proc;
+
+#################################################################################
+# Name: LogarithmicPart
+# Calling Sequence：LogarithmicPart(x, T, dT, f, z)
+# Input:   x,    an indeterminate
+#             T,    a nonempty list [t1, ..., tn] of indeterminates
+#             dT,  the list of derivatives of the elements in T
+#             f,    a nonzero tn-simple element in C(x, T)
+#             z,    another indeterminate
+#
+#Optional: M,  selection of a method.  If the optional arguement is not presented, then AlgEH is chosen
+#              choose Rothstein-Trager's algorithm if M = 'RT',
+#                           Lazard-Rioboo-Trager's algorithm if M = 'SR',
+#                           Czichowski's algorithm if M = 'GB',
+#                           Algorithm based on linear algebra if M = 'LA'  
+#                           Algorithm baed on evaluation homomorphism， otherwise
+#
+# Output:  L, B
+#                        L is the logarithmic part of int(f, x)  
+#                         B = 1 if int(f, x) has a complete logarithmic part, B = 0, otherwise 
+#################################################################################  
+
+LogarithmicPart := proc(x, T, dT, f, z, M)   
+    local L;
+
+    #-------------------------------------------
+    # Choose a method
+    #-------------------------------------------
+
+    if nargs = 6 then 
+       if args[6] = 'RT' then
+          #print(Rothstein_Trager);
+          L := AlgRT(x, T, dT, f, z);
+       end if;
+       if args[6] = 'SR' then
+          #print(Lazard_Rioboo_Trager);
+          L := AlgSR(x, T, dT, f, z);
+       end if;
+       if args[6] = 'LA' then
+          #print(FGLM_based);
+          L := AlgLA(x, T, dT, f,  z);
+       end if;
+       if args[6] = 'GB' then
+          #print(Czichowski);
+          L := AlgGB(x, T, dT, f, z);
+       end if;
+     else 
+       #print(Evaluation);
+       L  := AlgEH(x, T, dT, f, z);
+     end if;
+     return L;
+end proc;
+
+      
+##########################################################################
+# Name: RothsteinTrager
+# Calling Sequence：RothsteinTrager(x, T, dT, f, z)
+# Input:   x,    an indeterminate
+#             T,    a list of indeterminates, maybe [];
+#             dT,   the list of derivatives of the elements in T, maybe []
+#             f,    an element in C(x, T);
+#             z,    another indeterminate
+# Output:  a polynomial associate to  the Rothstein-Trager resultant of f over C(x,T). 
+############################################################################
+
+RothsteinTrager := proc(x, T, dT, f, z)
+    local fs, a, d, dp, n, t;
+   
+    #----------------------
+    # initialize
+    #----------------------
+
+    fs := normal(f); 
+    (a, d) := numer(fs), denom(fs);
+     dp := DField:-Derivative(x, T, dT, d);
+
+   #-----------------------------------
+   # choose the main indetermiante
+   #-----------------------------------
+
+    n := nops(T);
+    if n = 0 then
+       t := x;
+    else
+       t := T[n];
+    end if;
+
+    #----------------------------------
+    # factorization trick
+    #----------------------------------
+
+     d := primpart(d, t); 
+     d := factor(d);
+
+     #---------------------------------
+     # prepare for return
+     #---------------------------------
+    
+    return resultant(numer(a - z*dp), d, t);
+end proc:
+
+#############################################################################
+# Name: MonicAssociate
+# Calling Sequence: 
+#             MonicAssociate(f, t, p, z)
+#
+# Input:  f, a nonzero polynomial in t
+#            t, an indeterminate
+# Optional:           
+#            p, an irreducible polynomial in z
+#            z, another indeterminate
+#
+# Output: the monic associate of f with respect to t
+#
+# Remark: the coefficent field of f is K[z]/(p) if  optional arguements are presented 
+##############################################################################
+
+MonicAssociate := proc(f, t, p, z)
+     local c, d, q, r, i;
+     (c, d) := lcoeff(f, t), degree(f, t);
+     if nargs = 2 then
+        r  := t^d + add(normal(coeff(f, t, i)/c)*t^i,  i=0..d-1);
+        return collect(r, t);
+     end if;
+     gcdex(c, p, z, 'q');
+     r := t^d + add(rem(coeff(f, t, i)*q, p, z)*t^i,  i=0..d-1);
+     return collect(r, t);
+end proc:
+
+##########################################################################
+# Name: ResultantResidues
+# Calling Sequence：
+#                  ResultantResidues(x, T, dT, f, z)
+#
+# Input:   x,    an indeterminate
+#             T,    a list [t1, ..., tn] of indeterminates, maybe []
+#             dT,   the list of derivatives of the elements in T, maybe []
+#             f,     a t-simple function, where t = tn if T <> [], otherwise t = x
+#             z,    another indeterminate
+#
+# Output:  a squarefree polynomial in C(x, t1, ..., t_{n-1})[z] whose roots are exactly the residues of f
+############################################################################
+
+ResultantResidues := proc(x, T, dT, f, z)
+    local r, rp, g;
+    r := numer(RothsteinTrager(x, T, dT, f, z));
+    rp := numer(diff(r, z));
+    g := gcd(r, rp);
+    return MonicAssociate(quo(r, g, z), z);
+end proc:
+
+
+#################################################################################################
+# Name:   GroebnerResidues
+# Calling sequence: GroebnerResidues(x, T, dT,f, z, method)
+# Input:   x,    an indeterminate;
+#            T,    a list [t1, ... tn] of indeterminates, constructing an S-primitve tower, maybe [];
+#          dT,   the list of derivatives of the elements in T, maybe [];
+#          f,    a tn-simple element in C(x, T), f is x-simple if T = [];
+#          z,    another indeterminate.
+# Output:  a squarefree polynomial in C(x, T)[z] whose roots are exactly the residues of f
+##################################################################################################
+
+
+GroebnerResidues := proc(x, T, dT, f, z, method)
+     local a, b, db, n, t, G, M, m, B, A, Sp, i, r, S, j, p, R, q, s, u;
+
+
+    #  Get a GB
+
+
+    (a, b) := numer(f), denom(f);
+    db := DField:-Derivative(x, T, dT, b);
+    n := nops(T);
+    if n = 0 then
+        t := x;
+    else
+        t := T[n];
+    end if;
+    gcdex(db, b, t, 's');
+    G := {b, z-s*a};
+
+
+    # Choose a method
+
+
+     M := rank;
+     if nargs = 6 then
+        M := rhs(args[6]);
+        if not member(M, [ 'equation' , 'rank', 'rankbound']) then
+           error "the method is not available";
+        end if;
+     end if;
+     
+
+
+     # initialize
+
+
+     m := degree(b, t);
+     B  := Matrix(m, shape=identity);
+     A  := B(1..m, 1);
+     u := rem(s*a, b, t);
+      r :=1;
+
+
+     # Compute
+
+
+     if M = 'equation' then
+        Sp := {};
+        i := 0;
+        while Sp={} do
+           i  := i + 1;
+           r := rem(r*u, b, t);
+           S := [];
+           for  j  from  0 to m-1 do
+                S := [op(S), coeff(r, t, j)];
+            end do;
+            A := <A|<op(S)>>;    
+            Sp := LinearAlgebra:-NullSpace(A);
+        end do;
+        p := add(op(Sp)[j]*z^(j-1),  j=1..i+1);
+        return MonicAssociate(p, z);
+    end if;
+
+
+    if M = 'rankbound' then
+       i := 0;
+       r :=1;
+       while i = 0 or LowerBoundForRank(A, q) = i+1 do
+          i := i + 1;
+          r :=rem(r*u, b, t);
+          S := [];
+          for j from 0 to m-1 do
+             S := [op(S),coeff(r, t, j)];
+          end do;
+          A := <A|<op(S)>>;
+          q := ithprime(RandomTools[Generate](integer(range = 100 .. 1000)));
+       end do;
+       Sp := LinearAlgebra:-NullSpace(A);
+        if Sp = [] then
+           M := 'rank';
+        else
+           p := add(op(Sp)[j]*z^(j-1),  j=1..i+1);
+           return MonicAssociate(p, z);
+        end if;
+    end if;
+
+
+   if M = 'rank'  then
+       i := 0;
+       while LinearAlgebra:-Rank(A) = i+1 do
+          i := i+1;
+          r := rem(r*u, b, t);
+         S := [];
+         for j from 0 to m-1 do
+             S := [op(S), coeff(r, t, j)];
+         end do;
+         A := <A|<op(S)>>;
+       end do;
+
+
+       Sp := LinearAlgebra:-NullSpace(A);
+
+
+       p := add(op(Sp)[j]*z^(j-1),  j=1..i+1);
+       return MonicAssociate(p, z);
+    end if;
+
+
+end proc;
+
+####################################################################
+# This code is from OreTools_ModularGCRDLCLM
+# Name: LowerBoundForRank
+# Calling sequence:
+#                   LowerBoundForRank(M, p)
+#
+# Input: M, a matrix with entries being multivariate polynomials
+#           over p:
+#        p, a prime:
+# Output: b, a nonnegative integer less than or
+#            equal to the rank of M.
+####################################################################
+
+ LowerBoundForRank  :=  proc(M, p)
+        local rn, cn, vars, g, e, N, i, j, en, s, b, de, dei, MM:
+
+        #------------------------------
+        # 1. Collect info about matrix
+        #------------------------------
+
+        rn := op(1, M)[1]:
+        cn := op(1, M)[2]:
+        vars := [op(indets(M))]:
+
+
+        #---------------------------------------
+        # Calculate rowwise common denominators
+        #---------------------------------------
+
+        de := []:
+        for i from 1 to rn do
+            dei := []:
+            for j from 1 to cn do
+                dei := [op(dei), denom(M[i,j])]:
+            end do:
+            de := [op(de), Lcm(op(dei)) mod p]:
+        end do:
+
+        MM := Matrix(rn, cn):
+        for i from 1 to rn do
+            for j from 1 to cn do
+                MM[i,j] := Normal(de[i]*M[i,j]) mod p:
+            end do:
+        end do:
+
+
+        #----------------------------------
+        # 2. Choose two evaluation points
+        #----------------------------------
+
+        g := rand(1..p-1):
+        e := [seq(g(), i=1..nops(vars))]:
+        s := {seq(vars[i]=e[i], i=1..nops(vars))}:
+
+        #---------------
+        # 3. Evaluation
+        #---------------
+
+        N := Matrix(rn, cn):
+        for i from 1 to rn do
+                for j from 1 to cn do
+                    N[i, j] := Expand(subs(s, MM[i, j])) mod p:
+                end do:
+        end do:
+
+        #------------------------
+        # 4. Compute rank(N)
+        #------------------------
+
+       LinearAlgebra:-Modular:-RowReduce(p, N, rn, cn, cn, 0,
+                      0, b, 0, 0, false):
+        return(b):
+
+   end proc:
+
+#################################################
+# Name: RankOfAnUpperTriangularMatrix
+# Calling Sequence: RankofAnUpperTriangularMatrix(R, rn, cn)
+# Input: R, a matrix in upper triangular matrix;
+#           rn, the number of rows;
+#           cn, the number of columns;
+# Output: r, rank of R;
+##################################################
+
+RankOfAnUpperTriangularMatrix := proc(R, rn, cn)
+    local r, i, j, t;
+    r := 0;
+    for i from 1 to rn do
+          for j from 1 to cn do
+               if R[i,j] <> 0 then
+                  t := true;
+                  break;
+               end if;
+          end do;
+          if t then
+             r := r + 1;
+          end if;
+          t := false;
+    end do;
+    return r;
+end proc:
+
+#######################################################################################################
+# Name: AlgSR   (the Lazard-Rioboo-Rothstein-Trager method)
+# Calling sequence:
+#        AlgSR(t, T, dT, f)
+# Input:
+#        t, an indeterminate;
+#        T, a list [t1, ..., t_n] of indeterminates;
+#        dT, the list of derivatives of T;
+#        f, a nonzero $t$-simple element of Q(x)(T);
+# Output: 
+#         the algorithm returns a list [[[p_1, g_1], ..., [p_s, g_s]], w],
+#         where p_1, ..., p_s are distinct irreducible polynomials in Q[z]\Q,
+#               g_i is in Q(x)(T)[z]/(p_i(z)), i=1,2,...,s,
+#         such that
+#             \sum_i \sum_{p_i(\gamma)} \gamma *log( g_i(\gamma))
+#         is the logarithmic part of int(f) and
+#          w=1, if the logarithmic part is complete, otherwise, w=0 .
+#########################################################################################################
+
+AlgSR := proc(x, T, dT, f, z)
+      local fs, n, t, rt, a, b, u, d, S, r, dr, Deg, P, s, L, i, j, h, q, m, p, g, dq, R, w;
+      print(enter_SR);
+      n := nops(T); 
+      w := 1;
+      if T = [] then
+         t := x;
+      else
+         t := T[-1];
+      end if;
+      fs := normal(f);
+      (a, b) := numer(fs), denom(fs);
+      u  := a - z*DField:-Derivative(x, T, dT, b);
+      d := degree(b, t);
+      print(Before_ring); print(u); print(b);
+      R := RegularChains:-PolynomialRing([t, op(1..n-1, T), x, z]);
+      print(After_ring); print(R);
+      if degree(numer(u), t) >= d then
+         #print(case_1); print(numer(u)); print(b);
+         S := RegularChains:-ChainTools:-SubresultantChain(numer(u), b, t, R);
+      else
+        #print(case_2); print(numer(u)); print(b);
+         S := RegularChains:-ChainTools:-SubresultantChain(b, numer(u), t, R);
+      end if;
+      r := RegularChains:-ChainTools:-LastSubresultant(S, R);
+      r := MonicAssociate(r, z);
+      dr := degree(r, z);
+      r := CFR(x, T, dT, r, z);
+      if degree(r, z)<dr then
+        w := 0;
+      end if;
+      P := factors(r)[2];
+      s := nops(P);
+      L := [];
+      for i from 1 to s do
+            (q, m) := P[i][1], P[i][2];
+            if m = d then
+               return [[[MonicAssociate(q, z),  MonicAssociate(b, t)]], w];
+            end if;
+            h := RegularChains:-ChainTools:-SubresultantOfIndex(m, S, R);
+            p := rem(h, q, z);
+            dq := degree(q, z);
+            if dq = 1 then
+               g := MonicAssociate(p, t);
+            else
+               g := MonicAssociate(p, t, q, z);
+            end if;
+            L := [op(L), [MonicAssociate(q, z),  g]];
+      end do;
+      return [L, w];
+end proc:
+
+#####################################################################################
+#Name：CFR（determine constant coefficient parts)
+#Calling sequence:
+#               CFR(x, T, dT, r, z)
+# Input:
+#        x, an indeterminate
+#        T, a list [t1, ..., t_n] of indeterminates, maybe empty
+#        dT, the list of derivatives of T
+#        r, a squarefree polynomial of C(x)(T)[z]
+#
+#Output:  p, the special part of r w.r.t. \kappa_D
+#######################################################################################
+
+CFR := proc(x, T, dT, r, z)
+   local i, u, p, g;
+       p := 0;
+      for i from 0 to degree(r, z) do
+         u:=coeff(r, z, i);
+         if u<>0 then
+            p:=normal(p+DField:-Derivative(x, T,dT, u)*z^i);
+         end if;
+      end do;
+      g :=gcd(numer(r), numer(p));
+      return MonicAssociate(g, z);
+   end proc:
+
+######################################################################################
+#Name: LogarithmicPartA
+#Calling sequence: 
+#      LogarithmicPartA(x, T, dT, f, z, p)
+#Input: x, an indetermnante
+#       T, a list [t_1, ..., t_n] of indeterminates
+#       dT, the list of derivatives of t1, ..., tn
+#       f,  a nonzero and t_n-simple function
+#       z, an indeterminate
+#       p, a squarefree polynomial in Q[z] with positive degree 
+#
+#Output: L, a list [[p_1, g_1], ..., [p_s, g_s]], where
+#           p = p_1 ... p_s is the irreducible factorization of p over Q,
+#           such that
+#            f = sum_{i=1 to s} sum_{p_i(gamma)=0} gamma*g_i(gamma)'/g_i(gamma).
+#########################################################################################
+
+LogarithmicPartA := proc(x, T, dT, f, z, p)
+       local a, b, t, u, F, m, L, i, h, c, g, gs;
+       
+       (a, b) := numer(f), denom(f);
+       if T = [] then
+          t := x;
+       else
+          t := T[-1]; 
+       end if;
+       
+       u := DField:-Derivative(x, T, dT, b);
+       
+       F := factors(p)[2];
+       m := nops(F);
+       #print(F);
+
+       L := [];
+       for i from 1 to m do
+           h := F[i][1];
+           #print(h);
+           c := RootOf(h=0);
+           #print(c);
+           g := evala(Gcd(numer(a-c*u), b));
+           if degree(h, z) = 1 then
+              gs := MonicAssociate(g, t);
+           else
+              gs := subs(c=z, g);
+              gs := MonicAssociate(gs, t, h, z);
+           end if;
+           L := [op(L), [MonicAssociate(h, z), gs]];
+       end do;
+       
+       return L;
+
+end proc:
+
+
+###################################################################################
+# Name: AlgEH  (determining logarithmic parts by evaluation homomorphisms)
+# Calling sequence:
+#        AlgEH(x, T, dT, f, z)
+# Input:
+#        z, an indeterminate
+#        T, a list [t1, ..., t_n] of indeterminates
+#        dT, the list of derivatives of T
+#        f, a nonzero $t$-simple element of Q(x)(T)
+#        z, a constant indeterminate
+#
+# Output:  [L, w] 
+#         L is  a list [[p_1, g_1], ..., [p_s, g_s]],
+#         where p_1, ..., p_s are distinct irreducible polynomials in Q[z]\Q,
+#               g_i is in Q(x)(T)[z]/(p_i(z)), i=1,2,...,s,
+#         such that
+#               \sum_i \sum_{p_i(\gamma)} \gamma *log( g_i(\gamma))
+#         is the logarithmic part of int(f, x)
+#         w = 1 if int(f ,x) has a complete logarithmic part, w =0 otherwise
+######################################################################################
+
+AlgEH  := proc(x, T, dT, f, z)
+      local fs, a, d, dp, n, t, r, b, S1, S2, ldp, ld, deg, N, H1, H2, bs1, bs2, as1, as2, ds1, ds2, g1, g2, r1, r2, s1, s2, i, L,  m, F,  g, c, h, gs, w, e;
+
+   #---------------------------
+   # initialize
+   #---------------------------
+
+    fs := normal(f);
+   (a, d) := numer(fs), denom(fs);
+   dp := DField:-Derivative(x, T, dT, d);
+   n := nops(T);
+   e := 0;
+   #----------------------------
+   # find the main indeterminate
+   #----------------------------
+
+   if n = 0 then
+      t := x;
+   else
+      t := T[n];
+   end if;
+
+   #---------------------------
+   # trivial case
+   #---------------------------
+
+   if n = 0 then
+      return AlgRT(x, [], [], f, z);
+   end if;
+
+   #--------------------------------------------------------------------------
+   # choose one lucky evaluation points and compute their images
+   #--------------------------------------------------------------------------
+
+    b := mul(dT[i], i=1..n)*lcoeff(dp, t)*lcoeff(d, t);   # conditions for quasi-lucky points
+   S1 := array(1..n);
+    deg := degree(d, t);
+    N := 0;
+
+   while true do
+          N := N + 1;
+
+          #-----------------------------------------------
+          # verify unlucky case
+          #-----------------------------------------------
+
+          if N > 10 then
+             return AlgRT(x, T, dT, f, z);
+          end if;
+
+          #------------------------------------------------
+          # choose a quasi-lucky point
+          #-------------------------------------------------
+
+          S1[1] := x = RandomTools:-Generate(integer(range=(-10000..10000)));
+          for i from 1 to n-1 do
+               S1[i+1] := T[i] = RandomTools:-Generate(integer(range=(-10000..10000)));
+          end do;
+          H1 := {seq(S1[i], i=1..n)};
+          bs1 := normal(subs(H1,b));
+          if bs1 <> 0  then
+             as1 := subs(H1,a-z*dp);
+             ds1 := subs(H1, d);
+             r1 := resultant(as1, ds1, t);
+
+              #----------------------------------------
+              #  verify whether the point is lucky
+              #-----------------------------------------
+
+             if degree(r1,z) = deg  then
+                 s1 := normal(r1/lcoeff(r1,z));
+                  break;
+              end if;
+           end if;
+     end do;
+
+    #-------------------------------------------------------
+    # choose  all constant residues of f
+    #-------------------------------------------------------
+
+      F := factors(numer(s1))[2];
+      m := nops(F);
+
+       L := []; 
+       for i from 1 to m do
+           h := F[i][1];
+           c := RootOf(h=0);
+           g := evala(Gcd(numer(a-c*dp), d));
+
+        #choose constant residues of f
+
+           if  degree(g, t)>0 then
+               if degree(h, z) = 1 then
+                  gs := MonicAssociate(g, t);
+               else
+                  gs := subs(c = z, g);
+                  gs := MonicAssociate(gs, t, h, z);
+               end if;
+               L := [op(L), [MonicAssociate(h, z), gs]];
+               e :=  e + degree(g, t)*degree(h, z);
+            end if;
+        end do;
+        if e = deg then
+           w := 1;
+        else
+           w :=0;
+          end if;
+       return [L, w];
+
+end proc:
+
+#====================================================================================
+# Name: AlgRT (determining logarithmic parts by resultants)
+# Calling sequence:
+#        AlgRT(x, T, dT, f,z)
+# Input:
+#        t, an indeterminate;
+#        T, a list [t1, ..., t_n] of indeterminates;
+#        dT, the list of derivatives of T;
+#        f, a nonzero $t$-simple element of Q(x)(T);
+#
+# Output:  L, w 
+#         L is the algorithm returns a list [[[p_1, g_1], ..., [p_s, g_s]], w],
+#         where p_1, ..., p_s are distinct irreducible polynomials in Q[z]\Q,
+#               g_i is in Q(x)(T)[z]/(p_i(z)), i=1,2,...,s,
+#         such that
+#                \sum_i \sum_{p_i(\gamma)} \gamma * log (g(\gamma))
+#         is the logarithmic part of int(f) and
+#          w=1, if the logarithmic part is complete, otherwise, w=0.
+#======================================================================================
+
+AlgRT  :=  proc(x, T, dT, f, z)
+      local fs, r, i, p, w;
+      fs := normal(f);
+      r := ResultantResidues(x, T, dT, fs, z);
+      p :=CFR(x, T, dT, r, z);
+      if degree(p, z) = degree(r, z) then
+         w := 1;
+     else
+        w := 0;
+     end if; 
+      return [LogarithmicPartA(x, T, dT, fs, z, p), w];
+end proc:
+
+#====================================================================================
+# Name: AlgLA (determining logarithmic parts by Ideals)
+# Calling sequence:
+#        AlgLA(x, T, dT, f,z)
+# Input:
+#        t, an indeterminate;
+#        T, a list [t1, ..., t_n] of indeterminates;
+#        dT, the list of derivatives of T;
+#        f, a nonzero $t$-simple element of Q(x)(T);
+# Output: false if f has a nonconstant residue. Otherwise
+#         the algorithm returns a list [[p_1, g_1], ..., [p_s, g_s]],
+#         where p_1, ..., p_s are distinct irreducible polynomials in Q[z]\Q,
+#               g_i is in Q(x)(T)[z]/(p_i(z)), i=1,2,...,s,
+#         such that
+#               \sum_i \sum_{p_i(\gamma)} \gamma * log(g_i(\gamma))
+#         is the logarithmic part of f and
+#          w=1, if the logarithmic part is complete, otherwise, w=0.
+#======================================================================================
+
+AlgLA  := proc(x, T, dT, f, z)
+     local fs, r, p, w;
+     fs := normal(f);
+     r := GroebnerResidues(x, T, dT, fs, z, 'method = rank');
+     p := CFR(x, T, dT, r, z);
+      if degree(p, z) = degree(r, z) then
+         w := 1;
+     else
+        w := 0;
+     end if; 
+     return [LogarithmicPartA(x, T, dT, f, z, p), w];
+end proc:   
+
+#####################################################################
+# Name: SortPolynomials
+# Calling Sequence
+#             SortPolynomials(P,  morder)
+# Input: P, a list of nonzero polynomials
+#           morder, a monomial order;
+# Output: Q, the sorted list of P w.r.t morder (increasingly)
+#######################################################################
+
+SortPolynomials := proc(P, morder)
+       local L, M, n, A, i, j,k, H;
+       L := Groebner:-LeadingMonomial(P, morder);
+       M := sort(L,  (a, b) -> Groebner:-TestOrder(a, b, morder));
+       n := nops(L);
+       A := array(1..n);
+       H := [];
+       for i from 1 to n do 
+             member(M[i], L, 'j');
+             A[i] := P[j];
+       end do;
+       return [ seq(A[k], k=1..n)];
+end proc:
+
+#====================================================================================
+# Name: AlgGB  (determining logarithmic parts by GB)
+# Calling sequence:
+#        AlgGB(t, T, dT, f)
+# Input:
+#        t, an indeterminate;
+#        T, a list [t1, ..., t_n] of indeterminates;
+#        dT, the list of derivatives of T;
+#        f, a nonzero $t$-simple element of Q(x)(T);
+#
+# Output:  L, e;
+#         the algorithm returns a list [[[p_1, g_1], ..., [p_s, g_s]],e]
+#         where p_1, ..., p_s are distinct irreducible polynomials in Q[z]\Q,
+#               g_i is in Q(x)(T)[z]/(p_i(z)), i=1,2,...,s,
+#         such that
+#                \sum_i \sum_{p_i(\gamma)} \gamma *log( g_i(\gamma))
+#         is the logarithmic part of Int(f) and 
+#          e=1, if the logarithmic part is complete, otherwise, e=0.
+#====================================================================================== 
+AlgGB  := proc(x, T, dT, f, z)
+     local a, b, db, n, t, G, H, L, M, m, u, v, Q, s, S, i, j, r, R, F, k, w, d, e;
+
+    #  Get a GB
+
+    (a, b) := numer(f), denom(f);
+    db := DField:-Derivative(x, T, dT, b);
+    n := nops(T);
+    if n = 0 then
+        t := x;
+    else
+        t := T[n];
+    end if;
+    gcdex(db, b, t, 's');
+    G := [b, z-s*a];
+
+    # FGLM;
+    
+    H := Groebner:-FGLM(G, plex(z,t),plex(t,z));
+    L := SortPolynomials(H, plex(t,z)); 
+    M := MonicAssociate(L[1], z);
+    if depends(M, [x, op(T)]) then 
+       e := 0;
+    else
+       e := 1;
+    end if;
+    
+    m := nops(L);
+    R := [];
+
+    r := lcoeff(L[1],   t);
+    for i from 2 to m do
+           u := lcoeff(L[i], t);
+           Q := normal(r/u);
+           S :=  normal(L[i]/u);
+           r := u; 
+           F := factors(Q)[2];
+           k := nops(F);
+           for j from 1 to k do 
+               w := F[j][1];
+               if  not depends(w, [x,op(T)]) then
+               d := degree(w, z);
+               if d > 0 then
+                  v := rem(S,  w, z);
+                   if d = 1 then
+                      v := MonicAssociate(v, t);
+                   else
+                     v := MonicAssociate(v, t, w, z);
+                   end if;
+                   R := [op(R), [MonicAssociate(w, z),  v]];
+               end if;
+             end if;
+           end do;
+     end do;
+     return [R, e];
+
+end proc:
+
+
+
+
+#==================================================================================
+#Name: IntLogarithmicPart
+#Calling sequence: 
+#      LogarithmicPartI(L, z)
+#Input:   L, a list of logarithmic derivatives in algebraic form
+#            z, an indeterminate;
+#Output: w, the integral of L 
+#====================================================================================
+ 
+IntLogarithmicPart := proc(L, z)
+      local m, w, i, p, g, c, dz;
+      m := nops(L);
+      if m = 0 then
+         return 0;
+      end if;
+      w := 0; 
+      for i from 1 to m do 
+            (p, g) := L[i][1], L[i][2];
+            c := RootOf(p=0, index = 'k');
+            dz := degree(p, z);
+             w  := w  + sum(c*subs(z=c, log(g)),  'k'=1..dz);
+      end do;
+      return w;
+end proc;
+
+##################################################################################
+# Name: IsACompelteLogarithmicPart
+# Calling sequence: IsACompleteLogarithmicPart(x, T, dT, f, L, z)
+# Input: x,    a variable of the base field C(x),
+#          T = [t1, t2, .., tn],    a list of indeterminates over the base field, maybe [],
+#          dT = [t1', t2', .., tn'],   a list of derivatives of elements in T, maybe [],
+#          f, a tn-simple element of C(x)(T),
+#          L, a logrithmic part in AlgEHbraic form,
+#          z, the formal 
+# Output: true if L represents the logarithmic part of f with respect to tn. Otherwise, false is returned.
+###################################################################################
+
+IsACompleteLogarithmicPart := proc(x, T, dT, f, L, z)
+   local k, u, i, p, g, a, d, c, v, m, w, n, t;
+   k := nops(L);
+   u := 0;
+   for i from 1 to k do
+        (p, g) := L[i][1], L[i][2];
+        a := DField:-Derivative(x, T, dT, g)/g;
+        d := degree(p, z);
+        c := RootOf(p=0, index = m);
+        v := sum(c*subs(z=c,a), m=1..d);
+       u := u + evala(Simplify(v));
+   end do;
+   w := normal(f- u);
+   n := nops(T);
+   if n = 0 then
+      t := x;
+   else
+     t := T[n];
+   end if;
+   if degree(denom(w), t) = 0 then
+      return true;
+   end if;
+   return false;
+end proc;
+
+#====================================================================================
+# Name: AlgSRs
+#       the Lazard-Rioboo-Rothstein-Trager method
+# Calling sequence:
+#        AlgSRs(t, T, dT, f)
+# Input:
+#        t, an indeterminate;
+#        T, a list [t1, ..., t_n] of indeterminates;
+#        dT, the list of derivatives of T;
+#        f, a nonzero $t$-simple element of Q(x)(T);
+# Output: false if f has a nonconstant residue. Otherwise
+#         the algorithm returns a list [[p_1, g_1], ..., [p_s, g_s]],
+#         where p_1, ..., p_s are distinct irreducible polynomials in Q[z]\Q,
+#               g_i is in Q(x)(T)[z]/(p_i(z)), i=1,2,...,s,
+#         such that
+#               f - \sum_i \sum_{p_i(\gamma)} \gamma * g(\gamma)'/g_i(\gamma)
+#         is reduced.
+#======================================================================================
+
+AlgSRs := proc(x, T, dT, f, z)
+      local fs, n, t, rt, a, b, u, d, S, r, Deg, P, s, L, i, j, h, q, m, p, g, dq, R;
+      n := nops(T); 
+      if T = [] then
+         t := x;
+      else
+         t := T[-1];
+      end if;
+      fs := normal(f);
+      (a, b) := numer(fs), denom(fs);
+      u  := a - z*DField:-Derivative(x, T, dT, b);
+      d := degree(b, t);
+      R := RegularChains:-PolynomialRing([t, op(1..n-1, T), x, z]);
+      if degree(u, t) >= d then
+         S := RegularChains:-ChainTools:-SubresultantChain(numer(u), b, t, R);
+      else
+         S := RegularChains:-ChainTools:-SubresultantChain(b, numer(u), t, R);
+      end if;
+      r := RegularChains:-ChainTools:-LastSubresultant(S, R);
+      r := MonicAssociate(r, z);
+      if depends(r, [x, op(T)]) then return false end if;
+      P := factors(r)[2];
+      s := nops(P);
+      L := [];
+      for i from 1 to s do
+            (q, m) := P[i][1], P[i][2];
+            if m = d then
+               return [[MonicAssociate(q, z),  MonicAssociate(b, t)]];
+            end if;
+            h := RegularChains:-ChainTools:-SubresultantOfIndex(m, S, R);
+            p := rem(h, q, z);
+            dq := degree(q, z);
+            if dq = 1 then
+               g := MonicAssociate(p, t);
+            else
+               g := MonicAssociate(p, t, q, z);
+            end if;
+            L := [op(L), [MonicAssociate(q, z),  g]];
+      end do;
+      return L;
+end proc:
+
+#====================================================================================
+# Name: AlgEHs (determining logarithmic parts by evaluation)
+# Calling sequence:
+#        AlgEHs(t, T, dT, f)
+# Input:
+#        t, an indeterminate;
+#        T, a list [t1, ..., t_n] of indeterminates;
+#        dT, the list of derivatives of T;
+#        f, a nonzero $t$-simple element of Q(x)(T);
+# Output: false if f has a nonconstant residue. Otherwise
+#         the algorithm returns a list [[p_1, g_1], ..., [p_s, g_s], p],
+#         where p_1, ..., p_s are distinct irreducible polynomials in Q[z]\Q,
+#               g_i is in Q(x)(T)[z]/(p_i(z)), i=1,2,...,s,
+#         such that
+#               f - \sum_i \sum_{p_i(\gamma)} \gamma * g(\gamma)'/g_i(\gamma)
+#         is reduced and p is the Rothstein-trager resultant of f.
+#======================================================================================
+
+AlgEHs  := proc(x, T, dT, f, z)
+      local fs, a, d, dp, n, t, r, b, S1, S2, ldp, ld, deg, N, H1, H2, bs1, bs2, as1, as2, ds1, ds2, g1, g2, r1, r2, s1, s2, i, L,  m, F,  g, c, h, gs;
+
+   #---------------------------
+   # initialize
+   #---------------------------
+
+    fs := normal(f);
+   (a, d) := numer(fs), denom(fs);
+   dp := DField:-Derivative(x, T, dT, d);
+   n := nops(T);
+
+   #----------------------------
+   # find the main indeterminate
+   #----------------------------
+
+   if n = 0 then
+      t := x;
+   else
+      t := T[n];
+   end if;
+
+   #---------------------------
+   # trivial case
+   #---------------------------
+
+   if n = 0 then
+      return AlgRTs(x, [], [], f, z);
+   end if;
+
+   #--------------------------------------------------------------------------
+   # choose two lucky evaluation points and compute their images
+   #--------------------------------------------------------------------------
+
+    b := mul(dT[i], i=1..n)*lcoeff(dp, t)*lcoeff(d, t);   # conditions for quasi-lucky points
+   (S1, S2) := array(1..n), array(1..n);
+    deg := degree(d, t);
+    N := 0;
+
+   while true do
+          N := N + 1;
+
+          #-----------------------------------------------
+          # very unlucky case
+          #-----------------------------------------------
+
+          if N > 10 then
+             return AlgRTs(x, T, dT, f, z);
+          end if;
+
+          #------------------------------------------------
+          # choose quasi-lucky points
+          #-------------------------------------------------
+
+          (S1[1], S2[1]) := x = RandomTools:-Generate(integer(range=(-10000..10000))), x = RandomTools:-Generate(integer(range=(-10000..10000)));
+          for i from 1 to n-1 do
+               (S1[i+1], S2[i+1]) := T[i] = RandomTools:-Generate(integer(range=(-10000..10000))), T[i] = RandomTools:-Generate(integer(range=(-10000..10000)));
+          end do;
+          (H1, H2) := {seq(S1[i], i=1..n)}, {seq(S2[i], i=1..n)};
+          (bs1, bs2) := normal(subs(H1,b)), normal(subs(H2,b));
+          if bs1 <> 0 and bs2 <> 0 then
+             (as1, as2) := subs(H1,a-z*dp), subs(H2, a-z*dp);
+             (ds1, ds2) := subs(H1, d), subs(H2, d);
+             (r1, r2) := resultant(as1, ds1, t), resultant(as2, ds2, t);
+
+              #----------------------------------------
+              #  verify whether points are lucky
+              #-----------------------------------------
+
+             if degree(r1,z)=deg and degree(r2,z)=deg then
+                 (s1, s2) := normal(r1/lcoeff(r1,z)), normal(r2/lcoeff(r2,z));
+                  break;
+              end if;
+           end if;
+     end do;
+
+    #-------------------------------------------------------
+    # determine constant residues
+    #-------------------------------------------------------
+     if s1 <> s2 then
+         return false;
+     end if;
+
+      F := factors(numer(s1))[2];
+      m := nops(F);
+
+       L := []; 
+       for i from 1 to m do
+           h := F[i][1];
+           c := RootOf(h=0);
+           g := evala(Gcd(numer(a-c*dp), d));
+           if F[i][2] <> degree(g, t) then
+              return false;
+           end if;
+           if degree(h, z) = 1 then
+              gs := MonicAssociate(g, t);
+           else
+              gs := subs(c = z, g);
+              gs := MonicAssociate(gs, t, h, z);
+           end if;
+           L := [op(L), [MonicAssociate(h, z), gs]];
+       end do;
+       return [L, s1];
+end proc:
+
+
+
+#====================================================================================
+# Name: AlgRTs (determining logarithmic parts by resultants)
+# Calling sequence:
+#        AlgRTs(t, T, dT, f)
+# Input:
+#        t, an indeterminate;
+#        T, a list [t1, ..., t_n] of indeterminates;
+#        dT, the list of derivatives of T;
+#        f, a nonzero $t$-simple element of Q(x)(T);
+# Output: false if f has a nonconstant residue. Otherwise
+#         the algorithm returns a list [[p_1, g_1], ..., [p_s, g_s]],
+#         where p_1, ..., p_s are distinct irreducible polynomials in Q[z]\Q,
+#               g_i is in Q(x)(T)[z]/(p_i(z)), i=1,2,...,s,
+#         such that
+#               f - \sum_i \sum_{p_i(\gamma)} \gamma * g(\gamma)'/g_i(\gamma)
+#         is reduced.
+#======================================================================================
+
+AlgRTs  :=  proc(x, T, dT, f, z)
+      local fs, r;
+      fs := normal(f);
+      r := ResultantResidues(x, T, dT, fs, z);
+      if depends(r, [x, op(T)]) then
+         return false;
+      end if;
+      return LogarithmicPartA(x, T, dT, fs, z, r);
+end proc:
+
+#====================================================================================
+# Name: AlgLAs (determining logarithmic parts by Ideals)
+# Calling sequence:
+#        AlgLAs(x, T, dT, f)
+# Input:
+#        x, an indeterminate;
+#        T, a list [t1, ..., t_n] of indeterminates;
+#        dT, the list of derivatives of T;
+#        f, a nonzero $t$-simple element of Q(x)(T);
+# Output: false if f has a nonconstant residue. Otherwise
+#         the algorithm returns a list [[p_1, g_1], ..., [p_s, g_s]],
+#         where p_1, ..., p_s are distinct irreducible polynomials in Q[z]\Q,
+#               g_i is in Q(x)(T)[z]/(p_i(z)), i=1,2,...,s,
+#         such that
+#               f - \sum_i \sum_{p_i(\gamma)} \gamma * g(\gamma)'/g_i(\gamma)
+#         is reduced.
+#======================================================================================
+
+AlgLAs  := proc(x, T, dT, f, z)
+     local fs, r;
+     fs := normal(f);
+     r := GroebnerResidues(x, T, dT, fs, z);
+     if depends(r, [x, op(T)]) then
+         return false;
+      end if;
+      return LogarithmicPartA(x, T, dT, f, z, r);
+end proc:   
+
+
+#====================================================================================
+# Name: AlgGBs  (determining logarithmic parts by GB)
+# Calling sequence:
+#        AlgGBs(t, T, dT, f)
+# Input:
+#        t, an indeterminate;
+#        T, a list [t1, ..., t_n] of indeterminates;
+#        dT, the list of derivatives of T;
+#        f, a nonzero $t$-simple element of Q(x)(T);
+# Output: false if f has a nonconstant residue. Otherwise
+#         the algorithm returns a list [[p_1, g_1], ..., [p_s, g_s]],
+#         where p_1, ..., p_s are distinct irreducible polynomials in Q[z]\Q,
+#               g_i is in Q(x)(T)[z]/(p_i(z)), i=1,2,...,s,
+#         such that
+#               f - \sum_i \sum_{p_i(\gamma)} \gamma * g(\gamma)'/g_i(\gamma)
+#         is reduced.
+#====================================================================================== 
+AlgGBs  := proc(x, T, dT, f, z)
+     local a, b, db, n, t, G, H, L, M, m, u, v, Q, s, S, i, j, r, R, F, k, w, d;
+
+    #  Get a GB
+
+    (a, b) := numer(f), denom(f);
+    db := DField:-Derivative(x, T, dT, b);
+    n := nops(T);
+    if n = 0 then
+        t := x;
+    else
+        t := T[n];
+    end if;
+    gcdex(db, b, t, 's');
+    G := [b, z-s*a];
+
+    # FGLM;
+    
+    H := Groebner:-FGLM(G, plex(z,t),plex(t,z));
+    L := SortPolynomials(H, plex(t,z)); 
+    M := MonicAssociate(L[1], z);
+    if depends(M, [x, op(T)]) then return false end if;
+    
+    m := nops(L);
+    R := [];
+
+    r := lcoeff(L[1],t);
+    for i from 2 to m do
+           u := lcoeff(L[i], t);
+           Q := normal(r/u);
+           S :=  normal(L[i]/u);
+           r := u; 
+           F := factors(Q)[2];
+           k := nops(F);
+           for j from 1 to k do 
+               w := F[j][1];
+               d := degree(w, z);
+               if d > 0 then
+                  v := rem(S,  w, z);
+                   if d = 1 then
+                      v := MonicAssociate(v, t);
+                   else
+                     v := MonicAssociate(v, t, w, z);
+                   end if;
+                   R := [op(R), [MonicAssociate(w, z),  v]];
+               end if;
+           end do;
+     end do;
+     return R;
+
+end proc:
+
+#########################################################
+#Name: VerifyLogPart
+#Calling sequence:
+#            VerifyLogPart(x, T, dT, h, L, z)
+# Input:  x, an indeterminate;
+#            T, a list [t1, ..., t_n] of indeterminates;
+#            dT, the list of derivatives of T;
+#            h, a nonzero $tn$-simple element of Q(x)(T);
+#            L, a list presenting a logarithmic part;
+#            z, an indeterminate;
+# Output: true if L is the logarithmic part of h., otherwise false is returned
+##########################################################
+
+VerifyLogPart := proc(x, T, dT, h, L, z)
+     local m, w, i, p, g, c, dz, H, Ls, k;
+     m := nops(L);
+     w := 0; 
+     for i from 1 to m do 
+            (p, g) := L[i][1], L[i][2];
+            c := RootOf(p=0, index = 'k');
+            dz := degree(p, z);
+             w  := w  + sum(c*subs(z=c, DField:-Derivative(x, T, dT, g)/g),  'k'=1..dz);
+      end do;
+      H := evala(Simplify(h-w));
+      if H = 0 then return true end if;
+      Ls := AlgEH(x, T, dT, H, z);
+      if Ls[1] = [] then
+         return true;
+      end if;
+      return false;      
+end proc;
+
+end module:
