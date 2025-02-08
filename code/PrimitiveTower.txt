@@ -1,0 +1,214 @@
+###########################################################################
+#
+# Module:  PrimitiveTower							   
+# 						                                 					   
+###########################################################################
+
+PrimitiveTower := module ()
+  option package; 
+  description "algorithms for a complete reduction in primitive towers";
+  global  _TowerInfo;
+  export 
+     AuxiliaryReduction,
+     Basis, 
+     CollectTowerInfo,
+     CompleteReduction,
+     Projection,
+     Verification;
+
+ 
+############################################################################
+# Name: AuxiliaryReduction
+# Calling sequence
+#               AuxiliaryReduction(x, T, dT, p)
+# Input:  x, T, dT, a primivie tower
+#            p, a polynomial in K[t], where n = nops(T), K=C(x, T[1], ..., T[n-1]) and t =T[n]
+# Output (q, r),  q in K[t]_d and r in the auxiliary subspace such that
+#             p = q' + r,
+#             where d = degree(p, t)
+#Remark  T is not empty
+##############################################################################
+
+AuxiliaryReduction  := proc(x, T, dT, p)
+          local n, t, pt, l, d, g, u, q, r, i, s; 
+          if p = 0 then return (0,0); end if;
+          n := nops(T);  t := T[n];
+          pt := p;  q := 0;  r := 0;
+          while pt <> 0 do
+                   l := lcoeff(pt, t);  d := degree(pt, t); 
+                   (g, u)  := CompleteReduction(x, [seq(T[i], i=1..n-1)], [seq(dT[i], i=1..n-1)], l);
+                   #s:=normal(l-DField:-Derivative(x, T, dT, g)-u);
+                   #if s <> 0 then error" found" end if;
+                   q := q + g*t^d;
+                   r := r + normal(u)*t^d;
+                   pt := normal((pt - l*t^d) - d*g*dT[n]*t^(d-1));
+           end do;
+           return (q, r);
+end proc:
+
+############################################################################
+# Name: Basis
+# Calling sequence
+#               AuxiliaryReduction(x, T, dT, p)
+# Input:  x, T, dT, a primivie tower,
+#            k, a nonnegative integer;
+# Output: L = [[u0, v0], ..., [u_k, v_k]] such that v0, ..., v_k form a C-basis of the intersection of K[t]'
+#              and the auxiliary subspace,   where n = nops(T), K=C(x, T[1], ..., T[n-1]) and t =T[n], and
+#              u_i'=v_i, i=0, 1, ... k;
+# Remark  T is not empty
+##############################################################################
+
+Basis  := proc(x, T, dT, k)
+          local n, t, lt, v0, L, i, a, b, q, r, u, v, j, H, B, m,l;
+          n := nops(T);  t := T[n];
+          H := _TowerInfo[n];
+          (lt, v0) := H[1], H[2] ;
+          B := H[5];  
+          m := nops(B); 
+          for i from m to k do
+               a := normal(t^(i+1)/(i+1)-lt*t^i);
+               b := normal(i*lt*dT[n]*t^(i-1));
+               (q, r) := AuxiliaryReduction(x, T, dT, b);
+               (u, v) := normal(a+q),  v0*t^i-r;
+               B := [op(B), [u,v]];
+          end do;
+          l := nops(_TowerInfo); 
+          _TowerInfo := [op(1..n-1, _TowerInfo), [H[1],H[2], H[3], H[4], B], op(n+1..l, _TowerInfo)]; 
+end proc:
+
+############################################################################
+# Name: Projection
+# Calling sequence
+#               Projection(x, T, dT, r, b, c)
+# Input:  x, T, dT, a primivie tower,
+#            r, an element of the auxiliary subspace,
+#            b, an element in the C-basis effective in \phi(t'),
+#            c,  equal to b^* \circ \phi(t');
+# Output: (u, v), u in K[t] and v in the b-complement such that
+#                   r = u' + v,  
+#             where n = nops(T), K=C(x, T[1], ..., T[n-1]) and t =T[n];
+# Remark  T is not empty
+##############################################################################
+
+Projection  := proc(x, T, dT, r, b, c)
+          local n, t, k, B, u, v, i, a, ct, L, w;
+          if r = 0 then return 0,0; end if;
+          n := nops(T);  t := T[n];
+          k := degree(r, t);
+
+          Basis(x, T, dT, k); 
+          B := _TowerInfo[n][5];
+          (u, v) := 0, r;
+          for i from 0 to k do
+                  a := coeff(v, t, k-i);
+                  ct := Rational:-Coefficient([x, op(T)], a, b);
+                  if ct <> 0 then
+                     L := B[k-i+1];
+                     w := normal(ct/c);
+                     (u, v) := normal(u + w*L[1]), normal(v-w*L[2]);
+                  end if;
+          end do; 
+          return u, v;
+end proc:
+
+############################################################################
+# Name: CompleteReduction
+# Calling sequence
+#               CompleteReduction(x, T, dT, f)
+# Input:  x, T, dT, a primivie tower,
+#            f, an element of the tower
+# Output: (g, r), two elements in the tower s.t
+#                   f = g' + r,  
+#              is a complete reduction of f.
+##############################################################################
+
+CompleteReduction  :=  proc(x, T, dT, f)
+          local ft, H, n, p, q, r, h, b, c, u, v, i, G;
+
+          ft := normal(f);
+          if ft = 0 then return 0,0 end if;
+
+          H := Reduction:-HermiteReduce(x, T, dT, f);
+          n := nops(T); 
+ 
+          if n = 0 then return H[1], H[2] end if; 
+
+          p := H[3];
+          if p = 0 then return H[1], H[2] end if;
+
+          (q, r) := AuxiliaryReduction(x, T, dT, p);
+          if normal(r) = 0 and n=3 then print(AR) end if;
+          if normal(r) = 0 then return H[1]+q, H[2] end if;
+
+          #h := CompleteReduction(x, [seq(T[i], i=1..n-1)], [seq(dT[i], i=1..n-1)], dT[n])[2];
+          G := _TowerInfo[n];
+          (b, c) := G[3], G[4]; 
+          (u, v) := Projection(x, T, dT, r, b, c);
+          if n=3 then print(proj) end if; 
+          return H[1]+q+u,  H[2]+v;
+end proc:
+
+
+
+###################################################
+# Name: CollectTowerInfo 
+# Calling sequence:
+#             CollectTowerInfo(x, T, dT)
+# Input: x, T, dT, a primivie tower, T <> []
+# 
+# For all t in T,  _TowerInfo = [[ \phi(t'), l_t, \theta_t, B_t] | t in Y], where
+#
+#   \phi(t),  the remainder of t' in the previous tower
+#   l_t,  an element in the previous tower s.t t'=l_t'+\phi(t')
+#   \theta_t, a basis element effective in \phi(t)
+#   B_t,  a basis of the integrable intersectiion up to certian level.
+######################################################
+
+CollectTowerInfo := proc(x, T, dT)
+           local n, i, tp, Ts, dTs, j, g, r, b, c, B;
+           n := nops(T);
+           _TowerInfo := [];
+           for i from 1 to n do 
+                tp := dT[i];
+                Ts := [seq(T[j], j=1..i-1)];
+                dTs := [seq(dT[j], j=1..i-1)]; 
+                (g, r) := CompleteReduction(x,  Ts, dTs, tp);
+                if r = 0 then error "a new constant is found" end if;
+                (b, c) := Rational:-BasisElement([x, op(Ts)], r);
+                 B := [ [T[i]-g, r]];
+                 _TowerInfo := [op(_TowerInfo), [g, r, b, c, B]];
+           end do;
+end proc:
+
+############################################################################
+# Name: Verification
+# Calling sequence
+#               Verfication(x, T, dT, f, g, r)
+# Input:  x, T, dT, a primivie tower
+#            f, g, r, three elements in the tower
+#
+# Remark :  verify if f = g'+r and r is a remainder in the tower
+##############################################################################
+
+Verification := proc(x, T, dT, f, g, r)
+     local h, n, b, c;
+     h := normal(f - DField:-Derivative(x, T, dT, g) - r);
+     if h  <> 0 then
+        error "the equality fails";
+     end if;
+     n := nops(T);  b := _TowerInfo[n][3];
+     c := Rational:-Coefficient([x, op(T)], r, b);
+     if  c <> 0 then
+        error "not a remainder";
+     end if; 
+     print(correct);
+end proc:
+           
+
+       
+  
+end module:
+         
+
+
+

@@ -1,0 +1,869 @@
+Rational  := module ()
+  option package;
+  description "The module includes basic operations on multivariate rational functions";
+  export
+     BasisElement,
+     Coefficient,
+     CoeffLaurent,
+     EEA,
+     ExtendedEuclidean,
+     ExtendedEuclideanOld,
+     HdegAndHcoeff,
+     HeadTerm,
+     LaurentMatryoshka,
+     LaurentCoeffAndMonomial,
+     LinearReduction,
+     Matryoshka,
+     NormalizedBasis,
+     NormalizedElement,
+     NormallyProperAndLaurentPolynomialParts,
+     NumerAndMonicDenom, 
+     PadicExpand,
+     ProperAndPolynomialParts,
+     TdegAndTcoeff;
+  local
+     BasisElement0,
+     Coefficient0, 
+    DecompositionOfCoefficients,
+    DecompositionOfLaurentCoefficients,
+    AMonicFactor,
+    SelectHeadMonomial;
+
+#################################################
+# Name: AMonicFactor
+# Calling sequence:
+#            AMonicFactor(t, p)
+#Input: t, an indeterminate
+#          p, a polynomial with degree(p, t)>0
+#Output: (q, m), where q is a monic irreducible factor w.r.t. t, and
+#             m is the multiplicity of q
+#Remark: degree(q, t)>0
+##################################################
+
+AMonicFactor := proc(t, p)
+      local ps, L, M,  q, m;
+      ps := primpart(p, t);
+      L := factors(ps)[2];
+      (q, m) := L[1][1], L[1][2];
+       q := q/lcoeff(q,t);
+       return (q, m);
+end proc:
+
+####################################################
+# Name: EEA
+# Calling sequence
+#             EEA(x, r, L, q)
+# Input: x, an indeterminate,
+#           r, a polynomial in x,
+#           L=[p_1, p_2, ..., p_n], a list of polynomials in x
+#           q, a polynomial,
+# Output: u, v, two polynomials such that 
+#               u*p_1* ...*p_n + v*q = r
+# Remark:   assume gcd(p_1*...p_n, q)=1
+#####################################################
+
+EEA := proc(x, r, L, q)
+             local n, p, M, u, v, w, i, f, g, f1, q1, c, cf, cq;
+             n := nops(L);
+             M := []; p := 1; cf := 1;
+             for i from 1 to n do
+                  f := normal(L[i]);
+                  p := p*f; 
+                  #normalize q and f s.t. they are polynomials in all variables and have content 1
+                  f1 := primpart(numer(f), x, 'c');
+                  cf := cf*c/denom(f);
+                  q1 := primpart(numer(normal(q)), x, 'cq');
+                  g := gcdex(f1, q1, x, 'w');
+                   if degree(g, x) > 0 then
+                      error("input error");
+                   end if; 
+                   M:=[op(M), w];
+              end do;
+              u := rem(r, q1, x);
+              for i from 1 to n do
+                   u := rem(u*M[i], q1, x);
+               end do;
+               u := u/cf;
+               v := normal((r-u*p)/q);
+              return u, v;
+end proc; 
+
+ ##################################################################################
+ # Name: ExtendedEuclidean 
+ # Calling sequence: ExtendedEuclidean(x, p, a, b)
+ # Input:   x,  a variable;
+ #          p, a, b,  three polynomials of x with gcd(a, b) = 1;
+ # Output:  [u, v],  two polynomials such that p = u*a + v*b with deg(u) < deg(b).
+ ##################################################################################
+
+
+ ExtendedEuclidean := proc(x, p, a, b)
+     local h, aa, bb, a1, b1,aa1, bb1, d1, d2,  u, v, pp1, pp2, t, c1, c2, q, s, a2, b2;
+     aa :=normal(a);
+     bb := normal(b);
+     (a1, a2) :=numer(aa), denom(aa);
+     (b1, b2) := numer(bb), denom(bb);
+     (aa1,bb1) :=primpart(a1,x, 'd1'), primpart(b1, x, 'd2');
+     h := gcdex(aa1, bb1, x, 's');
+     if degree(h, x) > 0 then
+         error "a nontrivial gcd is found";
+     end if;
+     u := rem(s*p, bb1, x);
+     pp1 := primpart(normal(p - u*aa1), x, 'c1');
+     #pp2 := primpart(b, x, 'c2');
+     t := evala(Divide(pp1, bb1, 'qu'));
+     if t = false then 
+        error "the division is not exact";
+     end if;
+     v := normal(c1)*qu;
+     return [normal(a2/d1)*u, normal(b2/d2)*v];
+ end proc:
+
+ ##################################################################################
+ # Name: ExtendedEuclideanOld 
+ # Calling sequence: ExtendedEuclideanOld(x, p, a, b)
+ # Input:   x,  a variable;
+ #          p, a, b,  three polynomials of x with gcd(a, b) = 1;
+ # Output:  [u, v],  two polynomials such that p = u*a + v*b with deg(u) < deg(b).
+ ##################################################################################
+
+ ExtendedEuclideanOld := proc(x, p, a, b)
+     local h, u, v, pp1, pp2, t, c1, c2, q, s, T;
+     h := gcdex(a, b, x, 's');
+     if degree(h, x) > 0 then
+         error "a nontrivial gcd is found";
+     end if;
+     T := time();
+     print(begin_rem);
+     u := rem(s*p, b, x);
+     print(remainder_taken); print(time()-T);
+     pp1 := primpart(normal(p - u*a), x, 'c1');
+     pp2 := primpart(b, x, 'c2');
+     t := evala(Divide(pp1, pp2, 'qu'));
+     if t = false then 
+        error "the division is not exact";
+     end if;
+     v := normal(c1/c2)*qu;
+     [u, v];
+ end proc:
+
+####################################################
+# Name: ProperAndPolynomialParts
+# Calling sequence: ProperAndPolynomialParts(f, t)
+# Input:   f,   a rational function of t;
+#          t,   an indeterminate.
+# Output:  fp,  the proper fraction part of f;
+#          pp,  the polynomial part of f.
+####################################################
+
+ProperAndPolynomialParts := proc(f, t)
+   local num, den, r, pp, fp;
+   (num, den) := numer(f), denom(f);
+   r := rem(num, den, t, 'pp');
+   fp := r/den;
+   return normal(fp), normal(pp);
+end proc:
+
+############################################################################################# 
+# Name: NormallyProperAndLaurentPolynomialParts
+#Calling sequence:
+#            NormallyProperAndLaurentPolynomialParts(f, t)
+#
+# Input:     f,   a rational function in t
+# Output:  [f1, f2] such that 
+#               f = f1+f2,
+#               where f1 is t-proper with den(f) not divisible by t, and f2 is a Laurent polynomial in t;
+################################################################################# 
+NormallyProperAndLaurentPolynomialParts := proc(f, t)
+   local  num, den, pp, fp, r, b, i, a,  M, f1, f2;
+
+   #compute the polynomal part and the fraction part of f 
+
+   (num, den) := numer(f), denom(f);
+
+   r  := rem(num, den, t, 'pp');
+   fp := r/den;
+   b := den; 
+
+  #compute ord_t(den(f)), i.e i
+
+   i  := 0;
+   while rem(b, t, t, 'a') = 0 do
+      i := i+1;
+      b := a;
+   end do;
+
+   M := ExtendedEuclidean(t, r, t^i, b);
+   f1 := normal(M[1]/b);
+   f2 := normal(expand( ((M[2]/t^i))+pp));
+   return ([f1, f2]);
+
+end proc: 
+
+
+#############################################################################################
+# Name: DecompositionOfCoefficients
+# Calling sequence:  DecompositionOfCoefficients(f, L, t)
+# Input: f,   a (multivariate) polynomial of indeterminates in L;
+#        L,   a list of indeterminates (in the ascending order w.r.t the purely lex order);
+#        t,   an indeterminate (not in L) in the coefficient field of f.
+# Output: fp, pp,
+#         fp,  a polynomial of L, with all coefficients being t-proper;
+#         pp,  a polynomial of [L, t] such that f = fp + pp.
+#############################################################################################
+
+DecompositionOfCoefficients := proc(f, L, t)
+   local g, c, X, P, fp, pp;
+   g :=  normal(f);
+   fp := 0;
+   pp := 0;
+
+   while g <> 0 do
+      c := lcoeff(g, L, 'X');
+      P := ProperAndPolynomialParts(c, t);
+      fp := normal(fp + P[1]*X);
+      pp := normal(pp + P[2]*X);
+      g := normal(g - c*X);
+   end do:
+
+   return fp, pp;
+end proc:
+
+######################################################################################## 
+# Name: DecompositionOfLaurentCoefficients
+#
+# Calling sequence:  DecompositionOfLaurentCoefficients(f, L, t)
+#
+# Input: f,   a (multivariate) Laurent polynomial of indeterminates in L;
+#        L,   a list of indeterminates (in the ascending order w.r.t the purely lex order);
+#        t,   an indeterminate (not in L) in the coefficient field of f.
+# Output: fp, pp,
+#         fp,  a polynomial of L, with all coefficients being normally t-proper;
+#         pp,  a polynomial of [L, t] such that f = fp + pp.
+############################################################################################# 
+DecompositionOfLaurentCoefficients := proc(f, L, t)
+   local g, c, X, P, fp, pp;
+   g :=  normal(f);
+   fp := 0;
+   pp := 0; 
+   while g <> 0 do
+      c := lcoeff(g, L, 'X');
+      P := NormallyProperAndLaurentPolynomialParts(c, t);
+      fp := normal(fp + P[1]*X);
+      pp := normal(pp + P[2]*X);
+      g := normal(g - c*X);
+   end do:
+   return fp, pp;
+end proc: 
+
+###############################################################################################################
+# Name:  Matryoshka
+# Calling sequence:  Matryoshka(T, f)
+# Input: T,   T = [t1, t2, .., tn], a nonzero list of indeterminates in the ascending order w.r.t the purely lex order,
+#             K_0 < K(t1) = K_1 < K_1(t2) = K_2 <..< K_{n-1}(tn) = K_n, where K_0 is the base field;
+#        f,   a rational function in K_0(T).
+# Output: F = [f0, f1, .., fn],
+#         f0,  a polynomial in K_0[T];
+#         fi,  a polynomial in K_i[t_{i+1}, .., tn],
+#              and all coefficients of f_i are ti-proper,    i = 1, .., n - 1;
+#         fn,  a tn-proper rational function in K_n.
+###############################################################################################################
+
+Matryoshka := proc(T, f)
+    local n, Q, F, L, g, i, P;
+    n := nops(T);
+    Q := ProperAndPolynomialParts(f, T[n]);
+
+    # Q[1] is a rational function in K_n, which is T[n]-proper
+
+    F := [Q[1]];
+    L := [];
+    g := Q[2];
+    for i from n by -1 to 2 do
+        L := [T[i], op(L)];
+        P := DecompositionOfCoefficients(g, L, T[i - 1]);
+        F := [P[1], op(F)];
+        g := P[2];
+    end do:
+    F := [g, op(F)];
+    return F;
+end proc:
+
+
+########################################################################
+# Name: LaurentCoeffAndMonomial
+# Calling sequence: LaurentCoeffAndMonomial(Y, f)
+# Input: Y, a set of indeterminates
+#           f, a nonzero Laurent polynomial in Y
+#Output L, a list of pairs consisting of the nonzero coeffs and corresponding monomials
+#########################################################################
+
+LaurentCoeffAndMonomial := proc(Y, f)
+    local n, d, a, i, g, L, t;
+    n := nops(Y);
+    d := denom(f);
+    a := 1;
+    for i from 1 to n do
+          a := a*Y[i]^degree(d, Y[i]);
+    end do;
+    g := normal(a*f);
+    L := []; 
+    while g <> 0 do    
+             t  := Groebner:-LeadingTerm(g, plex(op(Y)));
+             L  := [op(L),  [t[1], normal(t[2]/a)]];
+             g := normal(g - t[1]*t[2]);
+    end do;
+    return L;
+end proc;     
+
+###################################################################################################################
+# Name: SelectHeadMonomial
+# Calling sequence: SelectHeadMonomial(T, M, P, i)
+# Input: T, a list of indeterminates in ascending order;
+#        M, a given monomial;
+#        P, a component in the matryoshka decomposition of a rational function;
+#        i, the subscript of P in the matryoshka decomposition, 0 <= i < n.
+# Output: s, c, m;
+#         s = 0 if the head monomial of P is lower than M. In this case, c = 0 and m = M;
+#         s = 1 if the head monomial of P is equal to M. In this case, c is the head coeff of P and m = M;
+#         s = 2 if the head monomial of P is higher than M. In this case, c is the head coeff of P  and m = hm_i(P);
+####################################################################################################################
+
+SelectHeadMonomial := proc(T, M, P, i)
+    local n, X, L, t, m, j;
+
+    #-------------------------
+    # A special case
+    #-------------------------
+
+    if P = 0 then
+       if M <> 0 then
+          return 0, 0, M;
+       end if;
+       return 1, 0, 0;
+    end if;
+
+    #--------------------------
+    # Initialize
+    #--------------------------
+
+    n := nops(T);
+    X := seq(T[n-j], j=0..n-i-1);
+    L := Groebner:-LeadingTerm(P, plex(X));
+
+    if M = 0 then
+       return 2, L[1], L[2];
+    end if;
+    if M = L[2] then
+       return 1, L[1], M;
+    end if;
+    t := Groebner:-TestOrder(M, L[2], plex(seq(T[n-j], j=0..n-1)));
+    if t then
+       return 2, L[1], L[2];
+    else
+       return 0, 0, M;
+    end if;
+end proc:
+
+
+#########################################################################################
+# Name: HeadTerm
+# Calling sequence: HeadTerm(T, P)
+# Input: T, a list of indeterminates in ascending order;
+#        P, a matryoshka decomposition of a rational function in T.
+# Output: hm, the head monomial of P;
+#         hc, a list, whose components are the head coeffs of P[i] with hm_i = hm;
+#         hi, the list of subscripts, whose corresponding components in P have the same
+#             head monomials as  hm, i.e. 0 <= i <= n for any i in P.
+#########################################################################################
+
+HeadTerm := proc(T, P)
+        local n, hm, hc, hi, i, L, s, c, m, p;
+
+        #---------------------------------
+        # initialize
+        #---------------------------------
+
+        n := nops(T);
+        (hm, hc, hi) := 0, [], [];
+
+        #----------------------------------
+        # search
+        #----------------------------------
+
+        for i from 0 to n-1 do
+            L := SelectHeadMonomial(T, hm, P[i+1], i);
+            (s, c, m) := L[1], L[2], L[3];
+            if s = 1 then
+               hc := [op(hc), c];
+               hi := [op(hi), i];
+            end if;
+            if s = 2 then
+               hm := m;
+               hc := [c];
+               hi := [i];
+            end if;
+        end do;
+
+        #--------------------------------
+        # handle the last component
+        #--------------------------------
+
+        p := P[n+1];
+        if p = 0 and hm = 0 then
+           hc := [op(hc), p];
+           hi :=[op(hi), n];
+        end if;
+        if p <> 0 and hm = 1 then
+           hc := [op(hc), p];
+           hi := [op(hi), n];
+        end if;
+        if p  <> 0 and hm = 0 then
+           hm := 1;
+           hc := [p];
+           hi  := [n];
+        end if;
+
+        hm, hc, hi;
+end proc:
+
+########################################################################### 
+# Name:  LaurentMatryoshka
+# Calling sequence:  LaurentMatryoshka(T, f)
+# Input: T,   T = [t1, t2, .., tn], a nonzero list of indeterminates in the ascending order w.r.t the purely lex order,
+#             K_0 < K(t1) = K_1 < K_1(t2) = K_2 <..< K_{n-1}(tn) = K_n, where K_0 is the base field;
+#             f,   a rational function in K_0(T).
+# Output: F = [f0, f1, .., fn],
+#         f0,  a polynomial in K_0[t1 ,..., tn, t1^(-1), ....,tn^(-1)] ;
+#         fi,  a polynomial in K_i[t_{i+1}, .., tn, t_{i+1}^(-1), ....,tn^(-1)],
+#              and all coefficients of f_i are normally ti-proper,    i = 1, .., n - 1;
+#         fn,  a normally tn-proper rational function in K_n.
+#############################################################################
+
+LaurentMatryoshka := proc(T, f)
+    local n, Q, F, L, g, i, P;
+
+    n := nops(T);
+    Q := NormallyProperAndLaurentPolynomialParts(f, T[n]); 
+
+    # Q[1] is a rational function in K_n, which is T[n]-proper 
+
+    F := [Q[1]];
+    L := [];
+    g := Q[2];
+    for i from n by -1 to 2 do
+        L := [T[i], op(L)];
+        P := DecompositionOfLaurentCoefficients(g, L, T[i - 1]);
+        F := [normal(P[1]), op(F)];
+        g := normal(P[2]);
+    end do:
+
+    F := [g, op(F)];
+
+    return F;
+
+end proc: 
+
+######################################################
+# Name: HdegAndHcoeff
+# Calling sequence:
+#             HdegAndHcoeff(t, f)
+# Input: t, an indeterminate,
+#            f, a nonzero Laurent polynomial in t,
+#Output: the head degree and head coefficient of f
+######################################################
+
+HdegAndHcoeff := proc(t, f)
+         local num, den, dn, dd; 
+         (num, den) := numer(f), denom(f);
+         (dn, dd) := degree(num,t), degree(den,t);
+         return dn-dd,  normal(lcoeff(num,t)/lcoeff(den,t));
+end proc: 
+
+######################################################
+# Name: CoeffLaurent
+# Calling sequence:
+#             CoeffLaurent(t, f, d)
+# Input: t, an indeterminate,
+#            f, a Laurent polynomial in t,
+#            d, an integer
+#Output: the coefficient of  t^d in f
+#######################################################
+
+CoeffLaurent := proc(t, f, d)
+       local fs, num, den, dd;
+       fs := normal(f);
+       if fs = 0 then 
+          return 0;
+       end if; 
+       (num, den) := numer(fs), denom(fs);
+        dd := degree(den, t);
+        return normal(coeff(num,  t, dd + d)/lcoeff(den, t));
+ end proc:
+
+######################################################
+# Name: Coefficient0
+# Calling sequence:
+#            Coefficient0(x, f, b)
+# Input: x, a variable,
+#           f, an element of C(x),
+#           b = [nb, db, mb], representing an element nb/db^mb in the canonical C-basis of C(x),
+#           where nb is a power of x, db is a monic irreducible polynomial with gcd(nb,db)=1,
+#           and mb is a positive integer
+#Output: the coefficient of b in f.
+########################################################
+
+Coefficient0 := proc(x, f, b) 
+local fs, c, nb, db, mb, numr, denr, p, q, u, v, w, k, r, a, s; 
+
+        # initialize
+
+        fs := normal(f); 
+
+        (nb, db, mb) := b[1], b[2], b[3];
+
+        # trivial case
+
+        if fs = 0 then return 0 end if;
+
+       # decompose
+
+       (r, p) := ProperAndPolynomialParts(fs, x);
+
+       # polynomial case
+
+       if db = 1 then return coeff(p, x, degree(nb, x));  end if; 
+
+      # fraction case 
+      
+      numr, denr := numer(r), denom(r);  
+    
+      # counting the multiplicity of db in denr
+   
+     (k, v) := (0, denr); 
+     do 
+          r := rem(v, db, x, 'w'); 
+          if r = 0 then 
+             (k, v)  :=  k+1, w;
+          else 
+             break;
+          end if; 
+      end do; 
+
+     # detect divisibility
+
+      if k = 0 or k < mb then return 0 end if:
+
+      # a partial fraction decomp
+
+      gcdex(v, db^k, x, s); 
+      a := PadicExpand(x, numr*s, db,  k-mb)[k-mb+1]; 
+      c := coeff(a, x, degree(nb, x)); 
+
+     return c;  
+end proc: 
+
+######################################################
+# Name: Coefficient
+# Calling sequence:
+#            Coefficient(T, f, b)
+# Input: T,  a nonempty list of indeterminates
+#           f, an element of C(T),
+#           b, an element in the canonical C-basis of C(x)[t, t^{-1}];
+#Output: the coefficient of b in f.
+########################################################
+
+Coefficient := proc(T, f, b)
+      local fs, n, t, numb, denb, ndeg, ddeg, p, m, B, bs, c;
+      
+      # initialize
+      fs := normal(f); 
+      if fs = 0 then return 0 end if;
+      n := nops(T);
+      t  := T[n];
+      (numb, denb) := numer(b), denom(b);
+      (ndeg, ddeg) := degree(numb, t), degree(denb, t);
+
+      # analyze the basis element
+
+      if ddeg = 0 then 
+         B := [t^ndeg, 1, 1]; 
+      else
+         (p, m) := AMonicFactor(t, denb);
+         B := [t^ndeg, p, m];
+      end if;
+   
+      # prepare for recursion
+
+      c := Coefficient0(t, fs, B);
+
+      # recursion
+
+      if n = 1 then return c end if;
+      bs := normal(b/(B[1]/B[2]^B[3]));
+      return Coefficient([op(1..n-1, T)], c, bs);  
+
+end proc:
+
+
+#############################################################################
+# Name: PadicExpand
+#            PadicExpand(x, f, p, k)
+# Input: x, an indeterminate
+#           f,  p two polynomials in C[x] with deg(p, x) > 0 
+# Output:  [f0, f1, ..., fk], where fi in C[x] and deg(fi, x) < deg(p, x) such that
+#                 f = f0 + f1*p + f2*p^2 + ... + fk*p^k  mod p^{k+1}
+##############################################################################
+
+PadicExpand := proc(x, f, p, k)
+         local r, q, L; 
+         
+         #-------------------
+         # Recursive base
+         #-------------------
+
+         if k = 0 then
+            return [rem(f, p, x)]; 
+         end if; 
+
+         r := rem(f, p, x, q); 
+
+         #-----------------------
+         # Recursion
+         #------------------------
+
+         L := PadicExpand(x, q, p, k-1);
+         return [r, op(L)];
+
+end proc:
+
+
+
+############################################################################
+# Name: BasisElement0 
+# Calling sequence:  BasisElement0(x, f)
+# Input:  x, a variable,
+#            f, a nonzero element of F(x), 
+# Output:  (b, c)
+#                where b is an element of the canonical F-basis appearing in f, and c is the corresponding coefficient 
+#############################################################################
+
+BasisElement0 := proc(x, f)
+     local r, p, d, num, den, L, M, l, i, q, m, u;
+     (r, p) := ProperAndPolynomialParts(f, x);
+     if p <> 0 then 
+        d := ldegree(p, x);
+        return x^d, coeff(p, x, d);
+     end if;
+     (num, den) :=  numer(r), denom(r);
+      (p, m) := AMonicFactor(x, den);
+      q := quo(den, p^m, x);
+      gcdex(q, p^m, x, u);
+      r := rem(num*u, p, x);
+      d := ldegree(r, x);
+     return x^d/p^m, coeff(r, x, d);
+end proc:
+
+###################################################################
+# Name: BasisElement
+# Calling sequence:
+#              BasisElement(X, f)
+# Input:  X, a nonempty list of indeterminates 
+#            f, a nonzero rational function in X
+# Output:  (b, c), where b is an element in the canonical basis appearing in f and c the 
+#                corresponding coefficient
+###################################################################
+
+BasisElement := proc(X, f)
+    local n, Xp, x, bp, cp, bs, cs, i;
+    n := nops(X);
+    if n = 1 then
+       return BasisElement0(op(X), f);
+    end if;
+    (Xp, x) := [seq(X[i], i=1..n-1)], X[n];
+    (bp, cp) := BasisElement0(x, f);
+    (bs, cs) := BasisElement(Xp, cp);
+    return bs*bp, cs;
+end proc:
+
+
+  
+
+
+
+############################################################################
+# Name: NormalizedElement 
+# Calling sequence:  NormalizedElement(x, t, b, u)
+# Input:  x, a variable,
+#            t, an indeterminate,
+#            b, a nonzero polynomial in C(x)[t, t^{-1}],
+# Output:  the normalization [v, w] of b,  
+#               v -- the leading element in the basis
+#               w -- the normalized element
+# Opitional: u, the coefficient for normalization 
+#############################################################################
+
+NormalizedElement  := proc(x, t, b, u)
+     local d, lc, f, c, bs;
+     
+     (d, lc) := HdegAndHcoeff(t,b); 
+     f := ABasisElement0(x, lc, c);
+     bs := [f*t^d, normal(b/c)];
+     if nargs = 4 then
+        u := c;
+     end if; 
+     return bs;
+end proc:
+
+############################################################################
+# Name: NormalizedBasis 
+# Calling sequence:  NormalizedBasis(x, t, B, M)
+# Input:  x, a variable,
+#            t, an indeterminate,
+#            B, a list of C-linearly independent elements of C(x)[t, t^{-1}],
+# Output:  Bs, a normalized basis of the C-linear subspace generated by B
+# Opitional: M, the matrix such that Bs[2] = B*M
+#############################################################################
+
+NormalizedBasis := proc(x, t, B, M)
+     local n, b, Bp, u, L, N, lt, ld, lc, i, bs, ct, c, H, Bs, A, G, j; 
+
+     #--------------------------------
+     # Initialize
+     #--------------------------------
+
+     n := nops(B);
+     b := B[1];
+     if nargs = 3 then
+        Bp := NormalizedElement(x, t, b);
+     else
+        Bp := NormalizedElement(x, t, b, u);
+        M := Matrix(1,1,[[1/u]]);
+     end if;
+     
+      #-----------------------------------
+      # Recursive base
+      #------------------------------------
+
+      if n = 1 then
+         return [Bp]
+      end if;
+     
+     #--------------------------------------
+     #  Prepare for recursion 
+     #--------------------------------------
+
+     L := [];
+     if nargs = 4 then
+        N := [];
+     end if; 
+    (lt, b) := Bp[1], Bp[2]; 
+    (ld, lc) := HdegAndHcoeff(t, lt);
+    for i from 2 to n do
+           bs := B[i];
+           ct := CoeffLaurent(t, bs,  ld);
+           c := Coefficient0(x, ct, lc);
+           bs := normal(bs - c*b);
+           L  := [op(L), bs];
+           if nargs = 4 then
+              N := [op(N), -c/u];
+           end if; 
+    end do;
+
+    #--------------------------------------
+    # Recursion
+    #--------------------------------------
+
+     Bs :=  NormalizedBasis(x, t, L, H);
+
+    #----------------------------------------
+    # Prepare for return
+    #----------------------------------------
+
+    Bs := [Bp, op(Bs)]; 
+
+    if nargs = 4 then
+       A := Matrix(1, n-1, [N]);
+       A := LinearAlgebra:-MatrixMatrixMultiply(A, H);
+       G := Matrix(n,n);
+       G[1,1] := 1/u;
+       for i from 2 to n do
+            G[1,i] := A[1,i-1];
+       end do;
+       for i from 2 to n do
+            for j from 2 to n do
+                 G[i,j] := H[i-1,j-1];
+            end do;
+       end do;
+        M := G; 
+    end if;
+    return Bs;
+end proc: 
+
+##################################################################
+# Name: LinearReduction
+# Calling sequence:
+#             LinearReduction(x, t, B, f, M)
+# Input: x, t, two indeterminates,
+#            B, a normalized basis, 
+#            f,  an element in C(x)[t, t^{-1}]
+# Output: the remainder of f with respect to B
+# Optional: M, a matrix such that  r = f - B*M
+#####################################################################
+
+LinearReduction := proc(x, t, B, f, M)
+      local r, n, i, ld, b, d, g, c;
+      r := f;
+      n := nops(B);
+      if nargs = 5 then
+         M := Matrix(n,1);
+      end if; 
+      for i from 1 to n do
+            (ld, b) := B[i][2][1], B[i][2][2];
+             d := degree(ld, t);
+            g := CoeffLaurent(t, r, d);
+            c := Coefficient0(x,  g,  normal(ld/t^d)); 
+            r := normal(r - c*b);
+            if nargs = 5 then
+               M[i,1] :=c;
+            end if;
+      end do;
+      return r;
+end proc:
+
+################################################################
+# Name: NumerAndDenom
+# Calling sequence:
+#                  NumerAndMonicDenom(t, f)
+# Input: t, an indeterminate
+#           f, a rational function
+# Output: a pair consisting of the numerator and monic denominator w.r.t t
+################################################################# 
+
+NumerAndMonicDenom := proc(t, f)
+     local fs, a, b, c;
+     fs := normal(f);
+     (a, b) := numer(fs), denom(fs);
+      c := lcoeff(b, t);
+      return  normal(a/c), normal(b/c);
+end proc:
+
+################################################################
+# Name: TdegAndTcoeff
+# Calling sequence:
+#                  TdegAndTcoeff(t, p)
+# Input: t, an indeterminate,
+#           p, a nonzero Laurent polynomial
+# Output: a pair consisting of the tail degree and tail coefficient w.r.t t
+################################################################# 
+
+TdegAndTcoeff := proc(t, p)
+         local num, den, dn, dd; 
+         (num, den) := numer(p), denom(p);
+         (dn, dd) := ldegree(num,t), ldegree(den,t);
+         return dn-dd,  normal(coeff(num,t, dn)/coeff(den,t, dd));
+end proc: 
+
+                  
+end module:
+

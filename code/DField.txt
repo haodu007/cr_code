@@ -1,0 +1,358 @@
+###########################################################################
+#
+# Module:  DField							   
+# 						   
+# The module includes basic operations in a differential field.                                     					   
+###########################################################################
+
+DField := module ()
+  option package;
+  description "The module includes basic operations in a differential field";
+  export
+    AlgebraicDerivative,
+    AssociatedMatrix,
+    Derivative,
+    FromFunctionalToRational,
+    FromRationalToFunctional;
+  local
+    AlgebraicDerivative0,
+    AlgebraicDerivative1,
+    IsIncreasing,
+    SameSignificantIndexes,
+    SignificantComponent,
+    SignificantComponentVector,
+    SignificantIndex,
+    SignificantIndexAndComponent,
+    SignificantIndexAndComponentVector,
+    SignificantIndexVector;
+
+#############################################################################################
+# Name: Derivative 
+# Calling sequence: Derivative(x, T, dT, f)
+# Input:   x,    a variable of the base field C(x);
+#          T = [t1, t2, .., tn],    a list of indeterminates over the base field, maybe [];
+#          dT = [t1', t2', .., tn'],   a list of derivatives of elements in T, maybe [];
+#          f,     a rational function in multivariate differential field C(x)(T).
+# Output:  the derivative of f.
+#############################################################################################
+
+Derivative := proc(x, T, dT, f)
+   local i, n, g, dg;
+   g := normal(f);
+   if T = [] then 
+       return normal(diff(g, x)); 
+   end if;
+   n := nops(T);
+   dg := diff(g, x);
+   for i from 1 to n do 
+       dg := dg + diff(g, T[i])*dT[i];
+   end do:
+   return normal(dg);
+end proc:  
+
+###########################################################################################
+# Name: AlgebraicDerivative0
+# Calling sequence: AlgebraicDerivative0(x, T, dT, y, p)
+# Input:   x,    a variable of the base field C(x);
+#          T = [t1, t2, .., tn],    a list of indeterminates over the base field, maybe [];
+#          dT = [t1', t2', .., tn'],   a list of derivatives of elements in T, maybe [];
+#          y,   a new symbol;
+#          p,   an irreducible polynomial in \bQ(x, T)[y].
+# Output:  the derivative of y, where p(y) is assumed to be zero.
+#
+# ( a subroutine used in AlgebraicDerivative )
+#############################################################################################
+
+AlgebraicDerivative0 := proc(x, T, dT, y, p)
+   local a, b;
+   a := Derivative(x, T, dT, p);
+   b := diff(p, y);
+   if b = 0 then return 0 end if;
+   return -a/b;
+end proc:
+
+###########################################################################################
+# Name: AlgebraicDerivative1
+# Calling sequence: AlgebraicDerivative1(x, T, dT, y, p, f)
+# Input:   x,    a variable of the base field C(x);
+#          T = [t1, t2, .., tn],    a list of indeterminates over the base field, maybe [];
+#          dT = [t1', t2', .., tn'],   a list of derivatives of elements in T, maybe [];
+#          y,   a new symbol;
+#          p,   an irreducible polynomial in \bC(x, T)[y].
+#          f,   a nonzero rational function in \bC(x, T)[y];
+# Output:  the derivative of f(y), where p(y) is assumed to be zero.
+#
+# ( a subroutine used in AlgebraicDerivative )
+#############################################################################################
+
+AlgebraicDerivative1 := proc(x, T, dT, y, p, f)
+   local a, b;
+   a := Derivative(x, T, dT, f);
+   b := diff(f, y)*AlgebraicDerivative0(x, T, dT, y, p);
+   return normal(a+b);
+end proc:
+
+###########################################################################################
+# Name: AlgebraicDerivative
+# Calling sequence: AlgebraicDerivative(x, T, dT, y, p, f)
+# Input:   x,    a variable of the base field C(x);
+#          T = [t1, t2, .., tn],    a list of indeterminates over the base field, maybe [];
+#          dT = [t1', t2', .., tn'],   a list of derivatives of elements in T, maybe [];
+#          y,   a new symbol;
+#          p,   an irreducible polynomial in \bC(x, T)[y].
+#          f,   a nonzero rational function in \bC(x, T)(y) whose denominator is not divisible by p;
+# Output:  the derivative of f(y), where p(y) is assumed to be zero.
+#############################################################################################
+
+AlgebraicDerivative := proc(x, T, dT, y, p, f)
+   local u, v, du, dv, h, up, vp;
+   (u, v) := numer(f), denom(f);
+   du := AlgebraicDerivative1(x, T, dT, y, p, u);
+   dv := AlgebraicDerivative1(x, T, dT, y, p, v);
+   h := normal((du*v-u*dv)/v^2);
+  (up, vp) := rem(numer(h), p, y), rem(denom(h), p, y);
+  return normal(up/vp);
+end proc:
+
+#####################################################################################################
+# Name: AssociatedMatrix
+# Calling sequence: AssociatedMatrix(T, dT)
+# Input: T = [t1, t2, .., tn], a list of indeterminates in the ascending order 
+#              w.r.t the purely lex order, representing a tower of primitive extension K_n
+#              K_0 < K(t1) = K_1 < K_1(t2) = K_2 <..< K_{n-1}(tn) = K_n, where K_0 is the base field;
+#        dT,  dT = [t1', t2', .., tn'], a list of derivatives of T.    
+# Output: A,  associated matrix of K_n.
+#####################################################################################################
+
+AssociatedMatrix := proc(T, dT)
+    local n,  j,  A,  P;
+    n  := nops(T);
+    if n = 1 then
+       A := <<dT[1]>>;
+    else
+
+       # dT depends on [T[1], .., T[n-1]]
+
+       P := Rational:-Matryoshka(T[1..(n - 1)], dT[1]);
+       A := <op(P)>;
+
+       # form the associated matrix of T. 
+
+       for j from 2 to n do 
+          P := Rational:-Matryoshka(T[1..(n - 1)], dT[j]);
+          A := <A | <op(P)>>;
+       end do:
+    end if;
+    return A; 
+end proc:
+
+###############################################################################################
+# Name: Significant Index 
+# Calling sequence: SignificantIndex(P)
+# Input:  P,  a list of matryoshka decomposition of a nonzero multivariate rational function f.   
+# Output: the significant index of f, i.e. the highest subscript of the nonzero component.
+###############################################################################################
+
+SignificantIndex := proc(P)
+   local i, n;
+   n := nops(P);
+   for i from n by -1 to 1 do
+      if P[i] <> 0 then 
+          return i - 1;
+      end if:
+   end do:
+end proc:
+
+
+
+###############################################################################################
+# Name: Significant Component 
+# Calling sequence: SignificantComponent(P)
+# Input:  P,  a list of matryoshka decomposition of a nonzero multivariate rational function f.  
+# Output: the significant component of f.
+###############################################################################################
+
+SignificantComponent := proc(P)
+   local i, n;
+   n := nops(P);
+   for i from n by -1 to 1 do
+      if P[i] <> 0 then 
+          return P[i];
+      end if:
+   end do:
+end proc:
+
+
+
+################################################################################################
+# Name: Significant Index And Component 
+# Calling sequence: SignificantIndexAndComponent(P)
+# Input:  P,  a list of matryoshka decomposition of a nonzero multivariate rational function f. 
+# Output: si, sc
+#         si,  the significant index of f;
+#         sc,  the significant component of f.
+#################################################################################################
+
+SignificantIndexAndComponent := proc(P)
+   local i, n, si, sc;
+   n := nops(P);
+   for i from n by -1 to 1 do
+      if P[i] <> 0 then 
+         return i - 1, P[i];
+      end if:
+   end do:
+end proc:
+
+
+
+##############################################################################################################
+# Name: Is Increasing 
+# Calling sequence: IsIncreasing(v, i)
+# Input:  v，  a list vector with entries being natural numbers.
+# Output: true,     if v is monotonically increasing;
+#         false, i  if v is not monotonically increasing, and v[1] <= v[2] <= .. <= v[i], but v[i] > v[i + 1].
+##############################################################################################################
+
+IsIncreasing := proc(v, i)
+    local n, j;
+    n := nops(v);
+    for j from 1 to n - 1 do
+       if v[j] > v[j + 1] then
+          if nargs = 2 then
+             i := j;
+          end if;
+          return false;
+       end if;
+    end do;
+    true;
+end proc:
+
+
+##################################################################################################################
+# Name: SignificantIndexVector
+# Calling Sequence：SignificantIndexVector(A)
+# Input:  A,  associated matrix of a primitive tower K_0 < K(t1) := K_1 < K_1(t2) := K_2 < .. <K_{n-1}(tn) := K_n.
+# Output: sv = [s_1, .., s_n],  (a list) the significant vector of the tower K_n.
+##################################################################################################################
+
+SignificantIndexVector := proc(A)
+    local i, n, L, sv;
+    n := LinearAlgebra:-ColumnDimension(A);
+    for i from 1 to n do
+        L := convert(LinearAlgebra:-Column(A, i), list);
+
+        # Although L is not the matyroshka decomposition of t_i'(do not have the n-th projection equal to 0), SignificantIndex still works on it
+
+        sv[i] := SignificantIndex(L);
+    end do;
+    sv := [seq(sv[i], i = 1..n)];
+end proc:
+
+#####################################################################################################
+# Name: Significant Component Vector
+# Calling sequence: SignificantComponentVector(A)
+# Input:  A,  an associated matrix of K_n.
+# Output: scv = [sc_1, .., sc_n],  the significant component vector of the tower K_n.
+#####################################################################################################
+
+SignificantComponentVector := proc(A)
+    local n, i, L, sc, scv;
+    n := LinearAlgebra:-ColumnDimension(A);
+    scv := [];
+    for i from 1 to n do
+        L := convert(LinearAlgebra:-Column(A, i), list);
+
+        # Although L is not the matryoshka decomposition of t_i'(do not have the n-th projection equal to 0), SignificantComponent still works on it
+
+        sc[i] := SignificantComponent(L);
+    end do;
+    scv := [seq(sc[i], i = 1..n)];
+end proc:
+
+
+
+############################################################################
+# Name: Significant Index And Component Vector
+# Calling sequence: SignificantIndexAndComponentVector(A)
+# Input:  A,  an associated matrix of K_n.
+# Output: sv, scv
+#         sv = [si_1, .., si_n],  the significant vector of the tower K_n;
+#         scv = [sc_1, .., sc_n],  the significant component vector of K_n.
+############################################################################
+
+SignificantIndexAndComponentVector := proc(A)
+    local i, n, L, S, sv, scv;
+    n := LinearAlgebra:-ColumnDimension(A);
+    for i from 1 to n do
+        L := convert(LinearAlgebra:-Column(A, i), list);
+        S[i] := SignificantIndexAndComponent(L);
+    end do:
+    sv := [seq(S[i][1], i = 1..n)];
+    scv := [seq(S[i][2], i = 1..n)];
+    return sv, scv;
+end proc:
+
+
+##########################################################################################################################
+# Name: Same Significant Indexes 
+# Calling sequence: SameSignificantIndexes(s, k)
+# Input:  s,  the significant index LIST of an S-primitive tower; 
+#         k,  an integer with 0 <= k <= n - 1, where n = nops(s);   
+# Output: V,  a list of integers such that s[i] = k, for any i in V.
+#             i.e. find the subscripts of indeterminates whose derivatives are of the significant index no bigger than k.
+##########################################################################################################################
+
+SameSignificantIndexes := proc(s, k)
+   local i, j, n, V;
+   n := nops(s);
+   if k + 1 > n then
+      return  [];
+   end if;
+   V := [];
+   for j from n by -1 to k + 1 do
+      if s[j] = k then 
+         V := [seq(i, i = 1..j)];
+         break;
+      end if:
+   end do:
+   return V;
+end proc:
+
+##################################################################
+# Name: FromFunctionalToRational
+# Calling sequence: FromFunctionalToRational(F, T, f)
+# Input: F，a list of functions,
+#           T,  a list of indeterminates,
+#           f,  a rational expression in F;
+# Output:  the expression obtained by replacing the elements of F in f by the respective
+#               elements in T.
+###################################################################
+
+FromFunctionalToRational := proc(F, T, f)
+       local n, i, g;
+       n := nops(F);
+       g := f;
+       for i from n to 1 by -1 do
+            g := subs(F[i]=T[i], g);
+       end do;
+       return g;
+end proc; 
+
+##################################################################
+# Name: FromRationalToFunctional
+# Calling sequence: FromRationalToFunctional(T,  F, r)
+# Input: T,  a list of indeterminates, 
+#           F  a list of functions,
+#           r,  an expression in the elements of C[T];  
+# Output:  the functional obtained by replacing the elements of T in  r by the respective
+#               elements in F.
+###################################################################
+
+FromRationalToFunctional := proc(T, F, r)
+       local n, i, S;
+       n := nops(T);
+       S := {seq(T[i] = F[i], i=1..n)};
+       return subs(S, r);
+end proc; 
+
+end module:

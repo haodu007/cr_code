@@ -1,0 +1,167 @@
+
+
+###########################################################################
+# Module:   AdditiveDecompositions													                                 					
+###########################################################################
+
+AddDecomp  := module ()
+  option package;
+  description "The module includes functions for additive decompositions";
+  export
+     SPrimitive;
+  local
+     IBPReduction1,
+     IBPReduction2;
+
+
+
+#######################################################################################################
+# Name: AdditiveDecomposition
+# Calling Sequence：SPrimitive(x, T, dT, f, 'M')
+# Input:  x,   an indeterminate of the base field K_0 = C(x),
+#         T = [t_1, t_2,..,t_n],   a list of S-primitive generators,
+#              with an S-primitive tower K_0 < K(t1) := K_1 < K_1(t2) := K_2 < .. <K_{n-1}(tn) := K_n,
+#         dT = [t1', t2', .., tn'],    a list of derivatives of T,
+#         f,   a rational function in K_0(T)\{0}.
+# Optional: M, the matrix associated to the input tower.
+#
+# Output: g, R,
+#         g,  a rational function in K_0(T), such that f = g' + r;
+#         R,  the matryoshka decomposition of r, such that f = g' + r,
+#             where r is a remainder (minimal in some sense), and f is integrable in K_0(T) iff r = 0.
+#######################################################################################################
+
+SPrimitive  :=  proc(x, T, dT, f, M)
+    local n, A, P, H, g, h, R, hm0, hm, hc, hi, i, j, ip, hp, hs, c, k, a, b, G, L, ind, s;
+
+    # -------------------------
+    # info from the tower
+    #--------------------------
+
+    n := nops(T);
+    A :=  DField:-AssociatedMatrix(T, dT);
+
+    #-----------------------------
+    # decompose the function
+    #-----------------------------
+
+    P :=  Rational:-Matryoshka(T, f);
+
+    #------------------------------
+    # reduce the tn-proper part
+    #-------------------------------
+    H := Reduction:-HermiteReduce(x, T, dT, P[n + 1]);
+
+   
+
+    #--------------------------------------
+    # prepare for reducing  other parts 
+    #--------------------------------------
+
+    (g, h)  := H[1], H[2];
+    R :=  [seq(P[i], i = 1..n),  0];
+
+    (hm, hc, hi)  :=   Rational:-HeadTerm(T, R); 
+    hm0 := 0;
+    ind := Reduction:-Indicator(T, hm);
+
+    #----------------------------------------
+    # reduce
+    #----------------------------------------
+
+    while hm <> hm0 do
+
+             j := 0;  hs := 0;
+            for i in hi do
+                 j := j+1;
+                 H := Reduction:-HermiteReduce(x, T[1..i], dT[1..i], hc[j]);
+                 (ip, hp) := H[1], H[2];
+                 if ip <> 0 then
+                    #g := normal(g + ip*hm);
+                    g := g + ip*hm;
+                    G := IBPReduction1(x, T, dT, ip, hm);
+                    R := normal(R - G);
+                  end if;
+                  hs := normal(hs + hp);
+              end do; 
+
+              if hs <> 0 then 
+                 L := Reduction:-SIntegrable(x, T, A, Rational:-Matryoshka(T, hs), ind); 
+                 if L <> [] then
+                    for k from 1 to ind do 
+                          c := L[k];
+                          if c <> 0 then
+                             (a, b) := IBPReduction2(x, T, dT, c*hm, ind, T[k]);
+                             g  :=  g + a ;
+                             R  :=  normal(R-b );
+                          end if; 
+                    end do;
+                 end if;
+               end if;
+
+               hm0 := hm;
+              (hm, hc, hi)  := Rational:-HeadTerm(T, R);
+              ind := Reduction:-Indicator(T, hm);
+
+     end do;
+     R := R + [seq(0, i = 1..n), h];
+
+     #-------------------------------
+     # prepare for return
+     #-------------------------------
+
+     if nargs = 5 then
+        M := A;
+     end if; 
+     return g, R;
+end proc:
+
+############################################################################################################################
+# Name: IBP Reduction1
+# Calling Sequence：IBPReduction1(x, T, dT, g, M)
+# Input:  x,  a variable of the base field C(x);
+#         T = [t_1, t_2,..,t_n],   a list of S-primitive generators,
+#             with an S-primitive tower K_0 < K(t1) := K_1 < K_1(t2) := K_2 < .. <K_{n-1}(tn) := K_n;
+#         dT = [t1', t2', .., tn'],   a list of derivatives of T;
+#         g,  a rational function in P_k, satisfying if 0<k<=n, then g is t_k-proper; if k=0, then g is a function in C(x);
+#         M,  a monomial with coeff in C, whose indicator is i such that k < i.
+# Output: L,  a list of Matryoshka decompostion of (g*M)', nops(L) = n + 1.
+############################################################################################################################
+
+IBPReduction1 := proc(x, T, dT, g, M)
+    local der, S, L;
+    der := DField:-Derivative(x, T, dT, g*M);   
+    L :=  Rational:-Matryoshka(T, der);
+    return L;
+end proc:
+
+
+########################################################################################################
+# Name: IBP Reduction2
+# Calling Sequence：IBPReduction2(x, T, dT, M, ind, t)
+# Input:  x, an indeterminate of the base field K_0 = C(x) where C is the field of constants;
+#         T = [t_1, t_2,..,t_n],   a list of S-primitive generators,  
+#              with an S-primitive tower K_0 < K(t1) := K_1 < K_1(t2) := K_2 < .. <K_{n-1}(tn) := K_n;         
+#         dT = [t1', t2', .., tn'],   a list of derivatives of T;
+#         M,   a monomial with coeff in C;
+#         ind, the indicator of M;
+#         t,   an indeterminate in T, the index of t in T is k, such that k <= i.
+# Output: f, L,   
+#            f, the antiderivative such that t'*M is a part of f' getting from integration by parts,
+#               if i <> k, then f' = t'*M + t*M'; if i = k, then f' = (t*M/(1 + degree(M, t)))';
+#            L, a list of matryoshka decompostion of f', nops(L) = n + 1.
+########################################################################################################
+
+IBPReduction2 := proc(x, T, dT, M, ind, t)
+    local f, der, L;
+    if t = T[ind] then
+        f := t*M/(1 + degree(M, t));
+    else
+        f := t*M; 
+    end if;
+    der := DField:-Derivative(x, T, dT, f);   
+    L := Rational:-Matryoshka(T, der);
+    return f, L;
+end proc:
+
+end module:
